@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Does rainfall forecasting work in India?</title>
 <meta name="description" content="A national, multi-year, lead-time-resolved verification of rainfall forecast skill over India. Two in five rain forecasts are false alarms, and a week of lead time barely changes that.">
-<link rel="stylesheet" href="style.css?v=734544ef">
+<link rel="stylesheet" href="style.css?v=e6358445">
 </head>
 <body>
 
@@ -20,10 +20,71 @@
   </div>
 </header>
 
-<!-- ============================================================ 1 FINDING -->
+<!-- =============================================================== 1 TOOL -->
+<section id="tool">
+  <div class="wrap">
+    <p class="eyebrow">Decision tool</p>
+    <h2>Should you act on the rain forecast?</h2>
+    <p class="lede">Answer three questions. The answer uses what this study
+       measured at your nearest grid cell — not a national average.</p>
+
+    <div class="tool-grid">
+      <div class="tool-steps">
+
+        <div class="step">
+          <label class="step-q" for="tLoc"><span class="stepno">1</span>
+            Where are you?</label>
+          <input id="tLoc" type="text" autocomplete="off" spellcheck="false"
+                 placeholder="Type a place in India" aria-describedby="tLocOut">
+          <div id="tSuggest" class="suggest" role="listbox" hidden></div>
+          <p class="step-alt">
+            <button type="button" class="linkbtn" id="tGeo">Use my location</button>
+            <span aria-hidden="true">·</span>
+            <button type="button" class="linkbtn" id="tPick">Pick on a map</button>
+          </p>
+          <div id="tMapWrap" hidden><div id="tMap" class="toolmap"></div></div>
+          <p id="tLocOut" class="step-out" role="status"></p>
+        </div>
+
+        <div class="step">
+          <span class="step-q"><span class="stepno">2</span>
+            How far ahead is the forecast you're reading?</span>
+          <div class="leadrow" id="tLead" role="group"
+               aria-label="Lead time in days"></div>
+        </div>
+
+        <div class="step">
+          <span class="step-q"><span class="stepno">3</span> What is at stake?</span>
+          <label class="money" for="tCost">If you hold off for a day, what
+            does that cost you?
+            <span class="moneyin">₹ <input id="tCost" type="number" min="0"
+              step="any" inputmode="decimal" placeholder="200"></span></label>
+          <label class="money" for="tLoss">If you go ahead and it rains, what
+            do you lose?
+            <span class="moneyin">₹ <input id="tLoss" type="number" min="0"
+              step="any" inputmode="decimal" placeholder="1000"></span></label>
+          <p class="step-hint">Any units, per acre or per field — only the
+             ratio between them matters.</p>
+        </div>
+      </div>
+
+      <div class="answer" id="tAnswer" aria-live="polite">
+        <p class="answer-empty">Tell me where you are and I'll tell you how
+           often it actually rains there when this forecast says rain.</p>
+      </div>
+    </div>
+
+    <p class="standing-caveat">This is ECMWF's model scored against IMD gauge
+       observations, Feb 2024 – Aug 2026. It is not the IMD advisory you
+       receive by SMS, and it says nothing about how much rain — only whether
+       at least 1 mm fell.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 2 FINDING -->
 <section id="finding">
   <div class="wrap">
-    <p class="eyebrow">The finding</p>
+    <p class="eyebrow">The study · the finding</p>
     <h2>Two in five rain forecasts are false alarms — and a week of lead time barely changes that</h2>
 
     <p class="hero-fig" id="heroFig">—</p>
@@ -65,11 +126,11 @@
 
     <p><strong>These numbers are measured against rain-gauge truth.</strong> Scored
        against the ERA5 reanalysis instead — a common shortcut — the same forecast
-       looks roughly twice as good. <a href="#era5">That trap is section 5.</a></p>
+       looks roughly twice as good. <a href="#era5">That trap is its own section below.</a></p>
   </div>
 </section>
 
-<!-- ========================================================== 2 COST-LOSS -->
+<!-- ========================================================== 3 COST-LOSS -->
 <section id="costloss">
   <div class="wrap">
     <p class="eyebrow">Is it worth acting on?</p>
@@ -105,7 +166,7 @@
   </div>
 </section>
 
-<!-- =========================================================== 3 SEASONAL -->
+<!-- =========================================================== 4 SEASONAL -->
 <section id="seasonal">
   <div class="wrap">
     <p class="eyebrow">When is it worse?</p>
@@ -132,7 +193,7 @@
   </div>
 </section>
 
-<!-- ================================================================ 4 MAP -->
+<!-- ================================================================ 5 MAP -->
 <section id="map">
   <div class="wrap">
     <p class="eyebrow">Where is it worse?</p>
@@ -172,7 +233,7 @@
   </div>
 </section>
 
-<!-- =============================================================== 5 ERA5 -->
+<!-- =============================================================== 6 ERA5 -->
 <section id="era5">
   <div class="wrap">
     <p class="eyebrow">If you are replicating this</p>
@@ -207,7 +268,7 @@
   </div>
 </section>
 
-<!-- ============================================================ 6 METHODS -->
+<!-- ============================================================ 7 METHODS -->
 <section id="methods">
   <div class="wrap">
     <p class="eyebrow">Methods, limits, and how to re-run it</p>
@@ -254,6 +315,17 @@
     <p id="novelty"></p>
     <ul class="tight" id="priorWork"></ul>
 
+    <h3>The place lookup is not analysis data</h3>
+    <p>The decision tool turns a typed place name into coordinates so it can
+       snap to the nearest of the 139 grid cells. That lookup is 700 Indian
+       places — every state and district headquarters plus the most populous
+       remaining towns — from <a href="https://www.geonames.org/">GeoNames</a>,
+       CC&nbsp;BY&nbsp;4.0, rebuilt by <code>src/build_places.py</code>.
+       <strong>No number on this page is derived from it.</strong> It only
+       decides which measured cell you are shown; the measurement itself is
+       unchanged whether you reach a cell by typing, by map click, or by
+       browser location.</p>
+
     <h3>Reproduce it</h3>
     <p>Every number on this page regenerates from cached inputs and is byte-identical
        on re-run; the bootstrap seeds are fixed.</p>
@@ -265,7 +337,8 @@ python fetch_openmeteo.py --source era5
 python extract_imd.py
 python analyze.py &amp;&amp; python seasonal.py &amp;&amp; python costloss.py
 python perpoint.py &amp;&amp; python crossmodel.py
-python report.py &amp;&amp; python export_web.py</code></pre>
+python report.py &amp;&amp; python export_web.py
+python build_places.py                      # place lookup for the tool</code></pre>
 
     <h3>Attribution</h3>
     <ul class="tight" id="attribution"></ul>
@@ -278,6 +351,6 @@ python report.py &amp;&amp; python export_web.py</code></pre>
   </div>
 </footer>
 
-<script src="app.js?v=734544ef"></script>
+<script src="app.js?v=e6358445"></script>
 </body>
 </html>

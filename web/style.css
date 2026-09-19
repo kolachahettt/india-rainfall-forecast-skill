@@ -104,6 +104,96 @@ p.lede { font-size: clamp(1rem, 2.2vw, 1.12rem); color: var(--ink-2); }
 .box.scope { border-left-color: var(--s2); }
 .box.why { border-left-color: var(--s1); }
 
+/* ----------------------------------------------------------- decision tool */
+.tool-grid { display: grid; grid-template-columns: 1fr; gap: 1.25rem; margin-top: 1.5rem; }
+@media (min-width: 900px) { .tool-grid { grid-template-columns: 1fr 1fr; gap: 2rem; } }
+
+.step { margin: 0 0 1.5rem; }
+.step:last-child { margin-bottom: 0; }
+.step-q {
+  display: flex; gap: 0.55rem; align-items: baseline;
+  font-weight: 620; font-size: 0.97rem; margin: 0 0 0.55rem;
+}
+.stepno {
+  flex: none; width: 1.45rem; height: 1.45rem; border-radius: 50%;
+  background: var(--s1); color: #fff; font-size: 0.78rem; font-weight: 700;
+  display: inline-grid; place-items: center;
+}
+.step input[type="text"], .step input[type="number"] {
+  font: inherit; font-size: 0.95rem; padding: 0.5rem 0.65rem; width: 100%;
+  border: 1px solid var(--axis); border-radius: 6px;
+  background: var(--surface-1); color: var(--ink);
+}
+.step input:focus-visible { outline: 2px solid var(--s1); outline-offset: 1px; }
+.step-alt { margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--muted); display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.linkbtn {
+  border: 0; background: none; padding: 0; font: inherit; font-size: 0.85rem;
+  color: var(--s1); cursor: pointer; text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.linkbtn:hover { color: var(--ink); }
+.step-out { margin: 0.6rem 0 0; font-size: 0.88rem; color: var(--ink-2); }
+.step-out .warn { color: var(--s2); font-weight: 620; }
+.step-hint { margin: 0.45rem 0 0; font-size: 0.82rem; color: var(--muted); }
+
+.suggest {
+  border: 1px solid var(--axis); border-radius: 6px; margin-top: 0.3rem;
+  max-height: 13rem; overflow-y: auto; background: var(--surface-1);
+}
+.suggest button {
+  display: block; width: 100%; text-align: left; border: 0; background: none;
+  font: inherit; font-size: 0.88rem; padding: 0.42rem 0.65rem;
+  color: var(--ink); cursor: pointer;
+}
+.suggest button:hover, .suggest button:focus-visible { background: var(--plane); outline: none; }
+.suggest .st { color: var(--muted); font-size: 0.82rem; }
+
+.leadrow { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.leadrow button {
+  font: inherit; font-size: 0.9rem; min-width: 2.6rem; padding: 0.45rem 0.6rem;
+  border: 1px solid var(--axis); border-radius: 6px;
+  background: var(--surface-1); color: var(--ink); cursor: pointer;
+}
+.leadrow button[aria-pressed="true"] { background: var(--s1); color: #fff; border-color: var(--s1); }
+
+.money { display: block; font-size: 0.9rem; color: var(--ink-2); margin: 0 0 0.7rem; }
+.moneyin { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.3rem; color: var(--muted); }
+
+.toolmap { margin: 0.7rem 0 0; }
+.toolmap svg { width: 100%; height: auto; display: block; }
+
+.answer {
+  background: var(--surface-1); border: 1px solid var(--rule);
+  border-radius: 8px; padding: 1.15rem 1.25rem; align-self: start;
+  position: sticky; top: 1rem;
+}
+@media (max-width: 899px) { .answer { position: static; } }
+.answer-empty { color: var(--muted); font-size: 0.9rem; margin: 0; }
+.answer h3 {
+  margin: 0 0 0.5rem; font-size: 1.12rem; line-height: 1.3; letter-spacing: -0.01em;
+}
+.answer h3 .big { color: var(--s1); }
+.answer p { font-size: 0.92rem; color: var(--ink-2); margin: 0 0 0.6rem; max-width: none; }
+.answer .context {
+  font-size: 0.95rem; color: var(--ink); background: var(--plane);
+  border-left: 3px solid var(--s1); border-radius: 0 5px 5px 0;
+  padding: 0.6rem 0.8rem; margin: 0.9rem 0;
+}
+.answer hr { border: 0; border-top: 1px solid var(--rule); margin: 1rem 0; }
+.verdict { display: flex; gap: 0.5rem; align-items: baseline; font-size: 1.02rem; font-weight: 660; margin: 0 0 0.5rem; }
+.verdict .mark { font-size: 1.1rem; line-height: 1; }
+.verdict.yes { color: #0ca30c; }
+.verdict.no { color: #d03b3b; }
+.answer .saving { font-weight: 620; color: var(--ink); }
+.answer dl { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.9rem; margin: 0.6rem 0 0; font-size: 0.85rem; }
+.answer dt { color: var(--muted); }
+.answer dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+
+.standing-caveat {
+  font-size: 0.85rem; color: var(--muted); margin: 1.5rem 0 0;
+  border-top: 1px solid var(--rule); padding-top: 0.9rem; max-width: 72ch;
+}
+
 /* ---------------------------------------------------------------- charts */
 .chart-card {
   background: var(--surface-1); border: 1px solid var(--rule);

@@ -583,6 +583,301 @@ function buildMethods() {
     `${meta.headline_metric_reason} All figures regenerate byte-identically from cached inputs.`;
 }
 
+/* ============================================================ SECTION 1 */
+/* The decision tool. Everything here is computed for the chosen CELL, not
+   nationally: points.json carries FAR, POD and wet-day count per cell, and
+   cell-days are a constant, so each cell's 2x2 table can be recovered and
+   its own cost-loss curve evaluated. Recombined nationally this reproduces
+   results/metrics.csv to 0.03% (rounding in the stored 3dp figures). */
+const T = { place: null, cell: null, dist: 0, lead: 3, cost: null, loss: null };
+
+function cellDays() {
+  return Math.round(D.meta.n_point_days / D.meta.n_points);
+}
+
+/** Recover hits / false alarms / misses / correct negatives for one cell. */
+function contingency(v) {
+  const n = cellDays(), far = v[0], pod = v[3], wet = v[7];
+  const a = pod * wet;
+  const c = wet - a;
+  const b = far < 1 ? a * far / (1 - far) : 0;
+  return { a, b, c, d: n - a - b - c, n };
+}
+
+/** Static cost-loss value for this cell at cost ratio alpha. */
+function cellValue(k, alpha) {
+  const s = (k.a + k.c) / k.n;
+  const ef = alpha * (k.a + k.b) / k.n + k.c / k.n;
+  const ec = Math.min(alpha, s);
+  const ep = alpha * s;
+  return { V: ec === ep ? NaN : (ec - ef) / (ec - ep), s, saving: ec - ef,
+           // where the value score crosses zero, in closed form:
+           //   upper bound is the hit rate a/(a+b); lower is c/(c+d)
+           lo: k.c / (k.c + k.d), hi: k.a / (k.a + k.b) };
+}
+
+const kmBetween = (la1, lo1, la2, lo2) => {
+  const r = Math.PI / 180;
+  const h = Math.sin((la2 - la1) * r / 2) ** 2
+    + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.sin((lo2 - lo1) * r / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(h));
+};
+
+function nearestCell(lat, lon) {
+  let best = null, bd = Infinity;
+  D.points.points.forEach((p) => {
+    const d = kmBetween(lat, lon, p.lat, p.lon);
+    if (d < bd) { bd = d; best = p; }
+  });
+  return { cell: best, dist: bd };
+}
+
+const rupee = (x) => "₹" + Math.round(x).toLocaleString("en-IN");
+
+function setPlace(lat, lon, label) {
+  const { cell, dist } = nearestCell(lat, lon);
+  T.place = label; T.cell = cell; T.dist = dist;
+  const out = $("#tLocOut");
+  out.innerHTML = "";
+  const near = h("span", {}, out);
+  near.innerHTML = `Nearest measured cell: <strong>${cell.lat.toFixed(1)}°N, `
+    + `${cell.lon.toFixed(1)}°E — ${Math.round(dist)} km from ${label}.</strong>`;
+  h("br", {}, out);
+  if (dist > 90) {
+    h("span", { class: "warn", text:
+      `⚠ The nearest cell is ${Math.round(dist)} km away. That is far enough `
+      + `that this is a regional hint, not a local answer.` }, out);
+  } else {
+    h("span", { text: "Rain varies over that distance. Treat this as the "
+      + "area around you, not your field." }, out);
+  }
+  renderAnswer();
+}
+
+function renderAnswer() {
+  const box = $("#tAnswer");
+  box.innerHTML = "";
+  if (!T.cell) {
+    h("p", { class: "answer-empty", text: "Tell me where you are and I'll "
+      + "tell you how often it actually rains there when this forecast says "
+      + "rain." }, box);
+    return;
+  }
+  const tk = keyFor(T.cell.m, 1.0);
+  const v = T.cell.m[tk][keyFor(T.cell.m[tk], T.lead)];
+  const k = contingency(v);
+  const rains = 1 - v[0], rLo = 1 - v[2], rHi = 1 - v[1];
+  const base = (k.a + k.c) / k.n;
+
+  const head = h("h3", {}, box);
+  head.innerHTML = `When the forecast says rain here, it rains about `
+    + `<span class="big">${Math.round(rains * 100)}%</span> of the time.`;
+  const miss = Math.max(1, Math.round(v[0] * 10));
+  h("p", { text: `On this study's data that could be anywhere from `
+    + `${Math.round(rLo * 100)}% to ${Math.round(rHi * 100)}%. So roughly `
+    + `${miss} in 10 of those rain forecasts `
+    + `${miss === 1 ? "doesn't" : "don't"} pan out.` }, box);
+  h("p", { class: "context", text: `For context, rain falls here on `
+    + `${Math.round(base * 100)}% of days anyway.` }, box);
+
+  if (!(T.loss > 0)) {
+    h("hr", {}, box);
+    h("p", { text: "Tell me what a washed-out spray costs and I'll tell you "
+      + "whether the forecast is worth acting on." }, box);
+    return;
+  }
+  const cost = T.cost || 0;
+  h("hr", {}, box);
+  if (cost >= T.loss) {
+    const vd = h("p", { class: "verdict no" }, box);
+    h("span", { class: "mark", text: "✗" }, vd);
+    h("span", { text: "Not worth acting on at these costs." }, vd);
+    h("p", { text: "Waiting costs as much as the loss. Just go ahead — no "
+      + "forecast changes that." }, box);
+    return;
+  }
+  const alpha = cost / T.loss;
+  const r = cellValue(k, alpha);
+  const trivial = alpha < r.s
+    ? "always waiting, and not spraying on days you were unsure"
+    : "always going ahead and accepting the occasional wasted spray";
+  const share = alpha < 0.25 ? "about a fifth" : alpha < 0.4 ? "about a third"
+    : alpha < 0.55 ? "about half" : alpha < 0.7 ? "about three-fifths"
+    : "most";
+
+  if (r.V > 0) {
+    const vd = h("p", { class: "verdict yes" }, box);
+    h("span", { class: "mark", text: "✓" }, vd);
+    h("span", { text: "Worth acting on." }, vd);
+    h("p", { text: `Waiting costs ${share} of what a washed-out spray costs. `
+      + `At that ratio, following the forecast beats the simple alternative — `
+      + `${trivial}.` }, box);
+    const sv = h("p", {}, box);
+    sv.innerHTML = `<span class="saving">On this study's period, over 100 `
+      + `decisions like this the forecast would have saved roughly `
+      + `${rupee(r.saving * T.loss * 100)}.</span>`;
+  } else {
+    const vd = h("p", { class: "verdict no" }, box);
+    h("span", { class: "mark", text: "✗" }, vd);
+    h("span", { text: "Not worth acting on at these costs." }, vd);
+    h("p", { text: `Waiting costs ${share} of what a washed-out spray costs. `
+      + `At that ratio you would do at least as well by ${trivial}, and not `
+      + `consulting the forecast at all.` }, box);
+  }
+  h("p", { text: `Here the forecast pays only while waiting costs between `
+    + `${Math.round(r.lo * 100)}% and ${Math.round(r.hi * 100)}% of the loss.` }, box);
+
+  const det = h("details", { class: "tv" }, box);
+  h("summary", { text: "Show the numbers behind this" }, det);
+  const dl = h("dl", {}, det);
+  const row = (a1, b1) => { h("dt", { text: a1 }, dl); h("dd", { text: b1 }, dl); };
+  row("Cell", `${T.cell.lat.toFixed(2)}°N, ${T.cell.lon.toFixed(2)}°E`);
+  row("Lead", `${T.lead} day${T.lead > 1 ? "s" : ""}`);
+  row("Hits", Math.round(k.a).toLocaleString());
+  row("False alarms", Math.round(k.b).toLocaleString());
+  row("Misses", Math.round(k.c).toLocaleString());
+  row("Correct negatives", Math.round(k.d).toLocaleString());
+  row("False alarm ratio", `${v[0].toFixed(3)} (${v[1].toFixed(3)}–${v[2].toFixed(3)})`);
+  row("Wet-day base rate", `${(base * 100).toFixed(1)}%`);
+  row("Cost–loss ratio α", alpha.toFixed(3));
+  row("Value score V", Number.isFinite(r.V) ? r.V.toFixed(3) : "—");
+  h("p", { class: "step-hint", text: "A single cell's false alarm ratio "
+    + "carries roughly ±0.07. The saving assumes costs stay constant and that "
+    + "each decision is independent of the last; neither is exactly true." }, det);
+}
+
+function buildTool() {
+  const leadRow = $("#tLead");
+  D.meta.leads.forEach((L) => {
+    const b = h("button", { type: "button", text: String(L),
+      "aria-pressed": L === T.lead ? "true" : "false" }, leadRow);
+    b.addEventListener("click", () => {
+      T.lead = L;
+      [...leadRow.children].forEach((x) => x.setAttribute(
+        "aria-pressed", x === b ? "true" : "false"));
+      renderAnswer();
+    });
+  });
+  h("span", { class: "step-hint", text: "days ahead" }, leadRow)
+    .style.cssText = "align-self:center;margin-left:.4rem";
+
+  const inp = $("#tLoc"), sug = $("#tSuggest");
+  const hideSug = () => { sug.hidden = true; sug.innerHTML = ""; };
+  inp.addEventListener("input", () => {
+    const q = inp.value.trim().toLowerCase();
+    if (q.length < 2) return hideSug();
+    const P = D.places.places;
+    const starts = [], has = [];
+    for (const p of P) {
+      const n = p[0].toLowerCase();
+      if (n.startsWith(q)) starts.push(p);
+      else if (n.includes(q)) has.push(p);
+      if (starts.length >= 8) break;
+    }
+    const hits = starts.concat(has).slice(0, 8);
+    sug.innerHTML = "";
+    if (!hits.length) {
+      h("button", { type: "button", disabled: "",
+        text: "No match — try a district or a larger town, or pick on the map."
+      }, sug);
+    }
+    hits.forEach((p) => {
+      const b = h("button", { type: "button" }, sug);
+      b.innerHTML = `${p[0]} <span class="st">${p[1]}</span>`;
+      b.addEventListener("click", () => {
+        inp.value = p[0]; hideSug(); setPlace(p[2], p[3], p[0]);
+      });
+    });
+    sug.hidden = false;
+  });
+  inp.addEventListener("blur", () => setTimeout(hideSug, 160));
+
+  $("#tGeo").addEventListener("click", () => {
+    const out = $("#tLocOut");
+    if (!navigator.geolocation) {
+      out.textContent = "This browser can't share a location."; return;
+    }
+    out.textContent = "Asking your browser for a location…";
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude: la, longitude: lo } = pos.coords;
+        if (la < 6 || la > 38 || lo < 66 || lo > 100) {
+          out.textContent = "That's outside the study area."; return;
+        }
+        inp.value = `${la.toFixed(2)}, ${lo.toFixed(2)}`;
+        setPlace(la, lo, "your location");
+      },
+      () => { out.textContent = "Couldn't get a location — type a place instead."; },
+      { timeout: 10000 });
+  });
+
+  $("#tPick").addEventListener("click", async () => {
+    const wrap = $("#tMapWrap");
+    if (!wrap.hidden) { wrap.hidden = true; return; }
+    wrap.hidden = false;
+    $("#tMap").textContent = "Loading map…";
+    if (!D.outline) {
+      D.outline = await fetch(dataURL("india_outline.geojson"))
+        .then((r) => r.json());
+    }
+    drawToolMap();
+  });
+
+  [["#tCost", "cost"], ["#tLoss", "loss"]].forEach(([sel, key]) => {
+    $(sel).addEventListener("input", (ev) => {
+      const n = parseFloat(ev.target.value);
+      T[key] = Number.isFinite(n) && n >= 0 ? n : null;
+      renderAnswer();
+    });
+  });
+}
+
+/** Compact picker map: the same cells, sized for the tool column. */
+function drawToolMap() {
+  const holder = $("#tMap");
+  holder.innerHTML = "";
+  const W = vwClamp(holder);
+  const LON0 = 67, LON1 = 98.5, LAT0 = 6, LAT1 = 37.6;
+  const H = Math.round(W * (LAT1 - LAT0)
+    / ((LON1 - LON0) * Math.cos((LAT0 + LAT1) / 2 * Math.PI / 180)));
+  const X = (lon) => (lon - LON0) / (LON1 - LON0) * W;
+  const Y = (lat) => (LAT1 - lat) / (LAT1 - LAT0) * H;
+  const svg = e("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`,
+    role: "group", "aria-label": "Pick a grid cell" }, holder);
+  (D.outline.features || []).forEach((f) => {
+    const g = f.geometry;
+    (g.type === "Polygon" ? [g.coordinates] : g.coordinates).forEach((poly) =>
+      poly.forEach((ring) => e("path", { class: "outline",
+        d: ring.map((c, i) => `${i ? "L" : "M"}${X(c[0]).toFixed(1)},`
+          + `${Y(c[1]).toFixed(1)}`).join("") + "Z" }, svg)));
+  });
+  const tk0 = keyFor(D.points.points[0].m, 1.0);
+  D.points.points.forEach((p) => {
+    const v = p.m[tk0][keyFor(p.m[tk0], T.lead)];
+    const x = X(p.lon - 0.125), y = Y(p.lat + 0.125);
+    const w = Math.max(3, X(p.lon + 0.125) - x);
+    const hh = Math.max(3, Y(p.lat - 0.125) - y);
+    e("rect", { class: "cell", x, y, width: w, height: hh,
+      fill: binColour(v[0]), "pointer-events": "none",
+      stroke: T.cell && T.cell.id === p.id ? css("--ink") : css("--surface-1"),
+      "stroke-width": T.cell && T.cell.id === p.id ? 2 : 0.6 }, svg);
+    const hw = Math.max(w, 24);
+    const r = e("rect", { x: x + w / 2 - hw / 2, y: y + hh / 2 - hw / 2,
+      width: hw, height: hw, fill: "transparent", class: "hit", tabindex: 0,
+      role: "button",
+      "aria-label": `${p.lat.toFixed(1)}°N ${p.lon.toFixed(1)}°E` }, svg);
+    const pick = () => {
+      $("#tLoc").value = `${p.lat.toFixed(2)}, ${p.lon.toFixed(2)}`;
+      setPlace(p.lat, p.lon, "the cell you picked");
+      drawToolMap();
+    };
+    r.addEventListener("click", pick);
+    r.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick(); }
+    });
+  });
+}
+
 /* ================================================================== MAP */
 const MAP = { mode: "cells", lead: 1, thr: 1.0, sel: null, loaded: false };
 const BINS = [
@@ -777,12 +1072,12 @@ async function ensureMap() {
   if (MAP.loaded) return;
   MAP.loaded = "pending";
   try {
-    const [pts, grp, out] = await Promise.all([
-      fetch(dataURL("points.json")).then((r) => r.json()),
+    const [grp, out] = await Promise.all([
       fetch(dataURL("groups.json")).then((r) => r.json()),
-      fetch(dataURL("india_outline.geojson")).then((r) => r.json()),
+      D.outline ? Promise.resolve(D.outline)
+                : fetch(dataURL("india_outline.geojson")).then((r) => r.json()),
     ]);
-    D.points = pts; D.groups = grp; D.outline = out;
+    D.groups = grp; D.outline = out;
     MAP.loaded = true;
     buildMapControls();
     drawMap();
@@ -800,10 +1095,12 @@ async function ensureMap() {
 
 /* ------------------------------------------------------------------ boot */
 async function boot() {
-  const [meta, far, cl, season, cross, methods] = await Promise.all(
-    ["meta", "far_by_lead", "costloss", "seasonal", "crossmodel", "methods"]
-      .map((n) => fetch(dataURL(n + ".json")).then((r) => r.json())));
-  Object.assign(D, { meta, far, cl, season, cross, methods });
+  const names = ["meta", "far_by_lead", "costloss", "seasonal", "crossmodel",
+                 "methods", "points", "places"];
+  const [meta, far, cl, season, cross, methods, points, places] =
+    await Promise.all(names.map(
+      (n) => fetch(dataURL(n + ".json")).then((r) => r.json())));
+  Object.assign(D, { meta, far, cl, season, cross, methods, points, places });
   // truth-source gap is derived, not a separate file
   D.gap = far.records.filter((r) => r.truth === "ERA5").map((r) => {
     const i = far.records.find((q) => q.truth === "IMD"
@@ -815,7 +1112,7 @@ async function boot() {
   /* One section failing must not take the rest of the page (or the map's
      observer) down with it — that turned a stale-cache problem into a blank
      map with no visible cause. */
-  [["finding", buildFinding], ["cost-loss", buildCostLoss],
+  [["tool", buildTool], ["finding", buildFinding], ["cost-loss", buildCostLoss],
    ["seasonal", buildSeasonal], ["ERA5", buildEra5],
    ["methods", buildMethods]].forEach(([name, fn]) => {
     try { fn(); } catch (err) { console.error(`section "${name}" failed:`, err); }
