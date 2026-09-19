@@ -1,0 +1,15 @@
+# Regenerable inputs and caches — not source.
+# data/imd_grd alone is ~67 MB of IMD .grd files; fetch_imd.py rebuilds it,
+# and the fetchers are resumable, so there is nothing here worth versioning.
+# Leading slash matters: an unanchored "data/" would also swallow web/data/,
+# which is the site's payload and must be versioned.
+/data/
+
+# Review artifacts, rebuilt by src/shoot.py
+/screenshots/
+
+# Personal permission grants, machine-specific
+.claude/settings.local.json
+
+__pycache__/
+*.pyc

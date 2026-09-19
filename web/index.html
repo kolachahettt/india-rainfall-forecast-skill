@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Does rainfall forecasting work in India?</title>
+<meta name="description" content="A national, multi-year, lead-time-resolved verification of rainfall forecast skill over India. Two in five rain forecasts are false alarms, and a week of lead time barely changes that.">
+<link rel="stylesheet" href="style.css?v=734544ef">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <p class="eyebrow">Forecast skill verification · India · Feb 2024 – Aug 2026</p>
+    <h1>When the forecast says rain, how often does it rain?</h1>
+    <p class="sub">A national, lead-time-resolved check of rainfall forecasts against
+       India Meteorological Department gauge observations — and what the answer is
+       worth to someone deciding whether to spray.</p>
+    <div class="provenance" id="provenance"></div>
+  </div>
+</header>
+
+<!-- ============================================================ 1 FINDING -->
+<section id="finding">
+  <div class="wrap">
+    <p class="eyebrow">The finding</p>
+    <h2>Two in five rain forecasts are false alarms — and a week of lead time barely changes that</h2>
+
+    <p class="hero-fig" id="heroFig">—</p>
+    <p class="hero-cap" id="heroCap">of one-day-ahead rain forecasts were false alarms:
+       the forecast said rain and no rain was measured.</p>
+
+    <p class="lede" id="findingLede"></p>
+
+    <div class="box scope">
+      <h4>What this does and does not measure</h4>
+      <p id="scopeText"></p>
+    </div>
+
+    <div class="chart-card">
+      <p class="chart-title">False alarm ratio by lead time</p>
+      <p class="chart-sub">Share of “rain” forecasts on which no rain was measured.
+        Lower is better. Shaded bands are 95% confidence intervals from a cluster
+        bootstrap over 8° spatial blocks.</p>
+      <div class="chart-holder" id="chartFar"></div>
+      <ul class="legend" id="legendFar"></ul>
+      <details class="tv"><summary>Table view — all metrics, all leads</summary>
+        <div id="tableFar"></div></details>
+    </div>
+
+    <div class="box why">
+      <h4>Why false alarm ratio, and not a standard skill score</h4>
+      <p>A false alarm is a spray the farmer skipped and should have made — the error
+         with a direct cost attached. Conventional skill scores disagree with it, and
+         not by a little: the Heidke Skill Score rates the <em>dry</em> season as the
+         better-forecast one while the false alarm ratio rates it worse, because HSS
+         is rewarded by the abundant correct “no rain” calls of a season that is
+         mostly dry. <a href="#seasonal">The seasonal split shows the inversion.</a></p>
+    </div>
+
+    <div class="box">
+      <h4>Read the trend from the paired test, not the overlapping bands</h4>
+      <p id="pairedText"></p>
+    </div>
+
+    <p><strong>These numbers are measured against rain-gauge truth.</strong> Scored
+       against the ERA5 reanalysis instead — a common shortcut — the same forecast
+       looks roughly twice as good. <a href="#era5">That trap is section 5.</a></p>
+  </div>
+</section>
+
+<!-- ========================================================== 2 COST-LOSS -->
+<section id="costloss">
+  <div class="wrap">
+    <p class="eyebrow">Is it worth acting on?</p>
+    <h2>Yes — at every lead from one to seven days, if protecting costs you less than about half the loss</h2>
+
+    <p class="lede" id="clLede"></p>
+
+    <div class="chart-card">
+      <p class="chart-title">Value of acting on the forecast, versus the best you could do from climatology alone</p>
+      <p class="chart-sub">The cost–loss ratio α is what protective action costs divided by
+        the loss it avoids. Value 1 would be perfect foresight; 0 means no better than
+        the simple climatological rule. Above zero, the forecast is worth acting on.</p>
+      <div class="chart-holder" id="chartCl"></div>
+      <ul class="legend" id="legendCl"></ul>
+    </div>
+
+    <div class="chart-card">
+      <p class="chart-title">The window where the forecast pays, by lead time</p>
+      <p class="chart-sub">Range of cost–loss ratios over which acting on the forecast beats
+        climatology. The marker is the ratio at which it pays most.</p>
+      <div class="chart-holder" id="chartClWindow"></div>
+      <details class="tv"><summary>Table view — window, peak value, and value at α = 0.10 and 0.30</summary>
+        <div id="tableCl"></div></details>
+    </div>
+
+    <div class="box">
+      <h4>What the model assumes</h4>
+      <p>Standard static cost–loss value score (Richardson 2000; Wilks 2001). It is a
+         decision model, not a measurement — these are its assumptions, not findings.</p>
+      <details class="tv"><summary>All ten assumptions</summary>
+        <ul class="tight" id="clAssumptions"></ul></details>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================== 3 SEASONAL -->
+<section id="seasonal">
+  <div class="wrap">
+    <p class="eyebrow">When is it worse?</p>
+    <h2>The dry season is worse for the farmer and better on paper</h2>
+
+    <p class="lede" id="seasonLede"></p>
+
+    <div class="chart-card">
+      <p class="chart-title">The same two seasons, ranked oppositely by two metrics</p>
+      <p class="chart-sub">Two separate scales, shown side by side rather than on one pair of
+        axes. In the left panel higher is worse; in the right panel higher is better.
+        The non-monsoon line sits above in both — which means worse on the left and
+        better on the right. That is the inversion.</p>
+      <div class="chart-holder" id="chartSeason"></div>
+      <ul class="legend" id="legendSeason"></ul>
+      <details class="tv"><summary>Table view — all metrics, both seasons, all leads</summary>
+        <div id="tableSeason"></div></details>
+    </div>
+
+    <div class="box">
+      <h4>Why the two metrics disagree</h4>
+      <p id="seasonWhy"></p>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ 4 MAP -->
+<section id="map">
+  <div class="wrap">
+    <p class="eyebrow">Where is it worse?</p>
+    <h2>The pattern is real; a single cell’s number is not precise</h2>
+
+    <p class="lede" id="mapLede"></p>
+
+    <div class="chart-card">
+      <div class="map-controls">
+        <span class="ctrl">Resolution
+          <span class="seg" role="group" aria-label="Map resolution">
+            <button id="btnCells" aria-pressed="true">0.25° cells</button>
+            <button id="btnGroups" aria-pressed="false">3° grid</button>
+          </span>
+        </span>
+        <label class="ctrl">Lead
+          <select id="selLead"></select></label>
+        <label class="ctrl">Wet day
+          <select id="selThr"></select></label>
+      </div>
+
+      <div class="map-layout">
+        <div>
+          <div id="mapHolder" class="skeleton">Map data loads when you scroll here…</div>
+          <ul class="binlegend" id="binLegend"></ul>
+          <p class="chart-sub" style="margin-top:.7rem" id="mapCaption"></p>
+        </div>
+        <div class="readout" id="readout">
+          <h4>Selected cell</h4>
+          <p class="empty">Click or tab to any cell to see its numbers and confidence interval.</p>
+        </div>
+      </div>
+
+      <details class="tv"><summary>Table view — every cell at the selected lead and threshold</summary>
+        <div id="tableMap"></div></details>
+    </div>
+  </div>
+</section>
+
+<!-- =============================================================== 5 ERA5 -->
+<section id="era5">
+  <div class="wrap">
+    <p class="eyebrow">If you are replicating this</p>
+    <h2>Do not use a reanalysis as your rainfall truth</h2>
+
+    <p class="lede" id="era5Lede"></p>
+
+    <div class="chart-card">
+      <p class="chart-title">The same forecasts, scored against two different “truths”</p>
+      <p class="chart-sub">False alarm ratio for ECMWF IFS, measured against IMD gauge
+        observations and against the ERA5 reanalysis. Same forecasts, same days,
+        same places — only the yardstick changes.</p>
+      <div class="chart-holder" id="chartEra5"></div>
+      <ul class="legend" id="legendEra5"></ul>
+    </div>
+
+    <h3>Is it just that ERA5 is scoring its own homework?</h3>
+    <p id="selfVerifyText"></p>
+
+    <div class="chart-card">
+      <p class="chart-title">Three forecast models, same two truths</p>
+      <p class="chart-sub">If shared lineage were the whole story, only ECMWF — whose model
+        produced ERA5 — would show a large gap. It shows the largest, but the others
+        show nearly as much.</p>
+      <div id="tableCross"></div>
+    </div>
+
+    <div class="box">
+      <h4>Verdict</h4>
+      <p id="era5Verdict"></p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 6 METHODS -->
+<section id="methods">
+  <div class="wrap">
+    <p class="eyebrow">Methods, limits, and how to re-run it</p>
+    <h2>What was done, and what it cannot tell you</h2>
+
+    <h3>Data and definitions</h3>
+    <ul class="tight" id="methodDefs"></ul>
+
+    <h3>Why the confidence intervals are wider than you might expect</h3>
+    <p id="spatialText"></p>
+    <div class="chart-card">
+      <p class="chart-title">Rainfall is correlated across the subcontinent</p>
+      <p class="chart-sub">Correlation between the wet/dry series of two locations, against
+        the distance between them. It never reaches zero — the monsoon keeps the whole
+        country partly in step.</p>
+      <div id="tableSpatial"></div>
+    </div>
+
+    <h3>Why some cells sit outside the national boundary</h3>
+    <p id="boundaryText"></p>
+    <details class="tv"><summary>Table view — every cell outside the boundary, and how far</summary>
+      <div id="tableBoundary"></div></details>
+
+    <h3>Known gaps</h3>
+    <ul class="tight" id="methodGaps"></ul>
+
+    <h3>Limitations</h3>
+    <ul class="tight">
+      <li><strong>One model.</strong> ECMWF IFS025, not the IMD district advisories that
+          farmers actually receive, and not “forecasts” in general.</li>
+      <li><strong>Grid cells, not districts.</strong> IMD’s district tables are not
+          retrievable for past dates, so this verifies at grid points. Any district
+          figure derived here would be an area-average approximation.</li>
+      <li><strong>Thresholds are conventional, not agronomic.</strong> 1 mm and 2.5 mm are
+          standard wet-day definitions; neither is tied to a real spray decision.</li>
+      <li><strong>Only 12 spatial blocks.</strong> 8° over India yields 12 very unequal
+          blocks, so the interval endpoints are themselves noisy. Do not read them to
+          three decimals.</li>
+      <li><strong>31 months, two monsoons.</strong> Not a climatology.</li>
+      <li><strong>Skill, not calibration.</strong> <span id="notCalib"></span></li>
+    </ul>
+
+    <h3>What is new here, and what is not</h3>
+    <p id="novelty"></p>
+    <ul class="tight" id="priorWork"></ul>
+
+    <h3>Reproduce it</h3>
+    <p>Every number on this page regenerates from cached inputs and is byte-identical
+       on re-run; the bootstrap seeds are fixed.</p>
+    <pre><code>cd src
+python fetch_imd.py                         # hours: serial-ish, resumable
+python sample_points.py
+python fetch_openmeteo.py --source forecast
+python fetch_openmeteo.py --source era5
+python extract_imd.py
+python analyze.py &amp;&amp; python seasonal.py &amp;&amp; python costloss.py
+python perpoint.py &amp;&amp; python crossmodel.py
+python report.py &amp;&amp; python export_web.py</code></pre>
+
+    <h3>Attribution</h3>
+    <ul class="tight" id="attribution"></ul>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p id="footerNote"></p>
+  </div>
+</footer>
+
+<script src="app.js?v=734544ef"></script>
+</body>
+</html>
