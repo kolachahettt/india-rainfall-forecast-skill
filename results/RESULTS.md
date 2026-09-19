@@ -3,7 +3,7 @@
 Model: `ecmwf_ifs025` (pinned). Truth: IMD 0.25° gridded, 0300–0300 UTC rainfall day.
 Uncertainty: 95% bootstrap CI, resampling 8° spatial blocks (not individual points — rainfall is spatially correlated, and point-level resampling halves the interval width).
 
-**The headline is the pair of directions.** The same forecast is right about 58% of the time when it says rain and about 95% when it says dry; a false alarm ratio alone reports only the first and understates the forecast.
+**The headline is the frequency bias.** The model calls rain on 34.9% of days; rain falls on 23.6%. BIAS = 1.48, near-flat across leads. Two consequences follow, each measured independently: the two directions come apart (PPV 0.577 against NPV 0.947 at lead 1), and the rain direction loses to persistence at lead 1 (0.577 against 0.623, paired 95% CI on the difference -0.074 to -0.016). See `persistence_benchmark.csv`.
 
 ## Wet day = ≥1.0 mm — IMD truth (primary)
 

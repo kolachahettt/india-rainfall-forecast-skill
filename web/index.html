@@ -4,18 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Does rainfall forecasting work in India?</title>
-<meta name="description" content="A national, multi-year, lead-time-resolved verification of rainfall forecast skill over India. Two in five rain forecasts are false alarms, and a week of lead time barely changes that.">
-<link rel="stylesheet" href="style.css?v=1daf789c">
+<meta name="description" content="A national, multi-year, lead-time-resolved verification of rainfall forecast skill over India. The forecast calls rain on half again as many days as it rains, and that single bias explains the rest.">
+<link rel="stylesheet" href="style.css?v=1e126fe3">
 </head>
 <body>
 
 <header class="top">
   <div class="wrap">
     <p class="eyebrow">Forecast skill verification · India · Feb 2024 – Aug 2026</p>
-    <h1>When the forecast says rain, how often does it rain?</h1>
-    <p class="sub">A national, lead-time-resolved check of rainfall forecasts
-       against India Meteorological Department gauge observations. The short
-       answer depends entirely on which way the forecast is pointing.</p>
+    <h1>The forecast calls rain on half again as many days as it rains</h1>
+    <p class="sub" id="headSub">A national, lead-time-resolved check of rainfall
+       forecasts against India Meteorological Department gauge observations.
+       One number drives the rest of this page.</p>
     <div class="provenance" id="provenance"></div>
   </div>
 </header>
@@ -72,15 +72,29 @@
 <section id="finding">
   <div class="wrap">
     <p class="eyebrow">The study · the finding</p>
-    <h2>A dry forecast is worth trusting. A rain forecast is closer to a coin flip.</h2>
+    <h2>One bias, two consequences</h2>
 
-    <div class="dirs hero-dirs" id="heroDirs"></div>
+    <div class="biashero" id="biasHero"></div>
 
     <p class="lede" id="findingLede"></p>
 
+    <h3>Consequence one — the two directions come apart</h3>
+
+    <div class="dirs hero-dirs" id="heroDirs"></div>
+
+    <p id="asymLede"></p>
+
     <div class="box why">
-      <h4>Why the two directions differ — it is the base rate, not the model</h4>
+      <h4>Why the two directions differ — it is the base rate and the bias, not skill</h4>
       <p id="asymWhy"></p>
+    </div>
+
+    <h3>Consequence two — at one day ahead, yesterday beats it</h3>
+
+    <div class="box flag">
+      <h4 id="persistHead">The rain direction at lead 1 loses to a null model</h4>
+      <p id="persistText"></p>
+      <p id="persistBalance"></p>
     </div>
 
     <div class="box scope">
@@ -89,13 +103,19 @@
     </div>
 
     <div class="chart-card">
-      <p class="chart-title">How often the forecast is right, in each direction, by lead time</p>
-      <p class="chart-sub">Higher is better in both. Wet day is ≥1 mm. Shaded bands are
+      <p class="chart-title">How often the forecast is right, in each direction, by lead time — against repeating yesterday</p>
+      <p class="chart-sub">Higher is better in all four. Wet day is ≥1 mm. Shaded bands are
         95% confidence intervals from a cluster bootstrap over 8° spatial blocks.
-        Note the two lines do not converge — the gap between them widens as the
-        forecast reaches further ahead.</p>
+        Dashed lines are the persistence benchmark: the forecast “it will do at
+        the target what it did <em>L</em> days before”, which is all a
+        decision-maker has without a model. ECMWF is above persistence
+        everywhere except the rain direction at one day ahead, where it is
+        below.</p>
       <div class="chart-holder" id="chartDirs"></div>
       <ul class="legend" id="legendDirs"></ul>
+      <details class="tv"><summary>Table view — ECMWF against persistence, every lead,
+        both thresholds, with paired confidence intervals on each difference</summary>
+        <div id="tablePersist"></div></details>
       <details class="tv"><summary>Table view — both wet-day thresholds, every
         metric, every lead</summary>
         <p class="chart-sub" style="margin:.6rem 0 0">A stricter threshold
@@ -104,6 +124,12 @@
           distinguishable here. The numbers are below rather than charted as
           two separated lines.</p>
         <div id="tableFar"></div></details>
+    </div>
+
+    <div class="box flag">
+      <h4 id="fiveDayHead">Where the forecast stops adding anything: about five days</h4>
+      <p id="fiveDayText"></p>
+    </div>
 
     <div class="box why">
       <h4>Why two numbers and not one skill score</h4>
@@ -339,6 +365,7 @@ python fetch_openmeteo.py --source era5
 python extract_imd.py
 python analyze.py &amp;&amp; python seasonal.py &amp;&amp; python costloss.py
 python perpoint.py &amp;&amp; python crossmodel.py
+python persistence.py                       # the naive benchmark
 python report.py &amp;&amp; python export_web.py
 python build_places.py                      # place lookup for the tool</code></pre>
 
@@ -353,6 +380,6 @@ python build_places.py                      # place lookup for the tool</code></
   </div>
 </footer>
 
-<script src="app.js?v=1daf789c"></script>
+<script src="app.js?v=1e126fe3"></script>
 </body>
 </html>

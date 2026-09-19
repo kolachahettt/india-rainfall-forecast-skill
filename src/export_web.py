@@ -292,6 +292,86 @@ def spatial_structure():
                      "interval width of resampling points singly.")}
 
 
+# ------------------------------------------- (7) persistence benchmark
+def persistence_payload():
+    """Reshape the persistence benchmark, and derive the two facts the page
+    leads with: the lead-1 loss, and the lead at which ECMWF's overall skill
+    drops below what knowing yesterday's weather would have given you.
+
+    The day-1-held column is a CEILING, not a competitor -- for leads beyond
+    1 it uses an observation the decision-maker does not have. It is the right
+    thing to compare overall skill against because it is the best any
+    persistence rule could do, and ECMWF falling below it is a real limit.
+    """
+    print("  [7/7] persistence benchmark ...", flush=True)
+    p = pd.read_csv(RESULTS / "persistence_benchmark.csv")
+    recs, ceilings, crossings = [], {}, []
+    for thr in THRESHOLDS:
+        s = p[p.threshold_mm == thr].sort_values("lead_days")
+        ceil_hss = float(s.persist_day1held_HSS.iloc[0])
+        ceil_ppv = float(s.persist_day1held_PPV.iloc[0])
+        ceilings[str(thr)] = {"HSS": r3(ceil_hss), "PPV": r3(ceil_ppv)}
+        below = [int(r.lead_days) for r in s.itertuples()
+                 if r.ECMWF_HSS < ceil_hss]
+        crossings.append({
+            "threshold_mm": thr,
+            "ceiling_HSS": r3(ceil_hss),
+            "first_lead_below": below[0] if below else None,
+            "leads_below": below,
+            "margin_at_lead7": r3(float(s.ECMWF_HSS.iloc[-1]) - ceil_hss)})
+        for r in s.itertuples():
+            recs.append({
+                "threshold_mm": thr, "lead_days": int(r.lead_days),
+                "obs_wet_rate": r4(r.obs_wet_rate),
+                "ecmwf": {"PPV": r3(r.ECMWF_PPV), "NPV": r3(r.ECMWF_NPV),
+                          "POD": r3(r.ECMWF_POD), "HSS": r3(r.ECMWF_HSS),
+                          "BIAS": r3(r.ECMWF_BIAS)},
+                "persistence": {"PPV": r3(r.persist_leadL_PPV),
+                                "NPV": r3(r.persist_leadL_NPV),
+                                "POD": r3(r.persist_leadL_POD),
+                                "HSS": r3(r.persist_leadL_HSS),
+                                "BIAS": r3(r.persist_leadL_BIAS)},
+                "diff": {
+                    "PPV": r3(r.ECMWF_PPV - r.persist_leadL_PPV),
+                    "PPV_lo": r3(r.d_persist_leadL_PPV_lo),
+                    "PPV_hi": r3(r.d_persist_leadL_PPV_hi),
+                    "PPV_pwin": r3(r.d_persist_leadL_PPV_pwin),
+                    "NPV": r3(r.ECMWF_NPV - r.persist_leadL_NPV),
+                    "NPV_lo": r3(r.d_persist_leadL_NPV_lo),
+                    "NPV_hi": r3(r.d_persist_leadL_NPV_hi),
+                    "HSS": r3(r.ECMWF_HSS - r.persist_leadL_HSS),
+                    "HSS_lo": r3(r.d_persist_leadL_HSS_lo),
+                    "HSS_hi": r3(r.d_persist_leadL_HSS_hi)}})
+    l1 = next(r for r in recs
+              if r["threshold_mm"] == 1.0 and r["lead_days"] == 1)
+    return {
+        "records": recs, "ceiling": ceilings, "crossing": crossings,
+        "lead1_loss": {
+            "ecmwf_PPV": l1["ecmwf"]["PPV"],
+            "persistence_PPV": l1["persistence"]["PPV"],
+            "difference": l1["diff"]["PPV"],
+            "ci_lo": l1["diff"]["PPV_lo"], "ci_hi": l1["diff"]["PPV_hi"],
+            "ecmwf_ahead_in_draws": l1["diff"]["PPV_pwin"],
+            "ecmwf_wins_NPV_by": l1["diff"]["NPV"],
+            "ecmwf_wins_HSS_by": l1["diff"]["HSS"],
+            "ecmwf_wins_POD_by": r3(l1["ecmwf"]["POD"]
+                                    - l1["persistence"]["POD"])},
+        "benchmark_note": (
+            "Murphy (1992): a skill score must be referenced against the most "
+            "accurate NAIVE method available, which for daily rainfall "
+            "occurrence at short lead is persistence, not climatology. "
+            "Lead-L persistence uses the observation from L days before the "
+            "target -- only information a decision-maker actually has when "
+            "the lead-L decision is taken."),
+        "ceiling_note": (
+            "The day-1-held column repeats yesterday's observation at every "
+            "lead. Beyond lead 1 that is information the decision-maker does "
+            "not have, so it is not a competitor -- it is the ceiling on what "
+            "any persistence rule could achieve, and the honest reference for "
+            "'is the forecast still adding anything'."),
+    }
+
+
 # ----------------------------------- lattice vs the political boundary
 def boundary_check():
     """How many lattice cells fall outside India's drawn boundary, and how far.
@@ -352,18 +432,48 @@ def main() -> int:
     xmodel = crossmodel_paired(df)
     reliab = split_half(df)
     spatial = spatial_structure()
+    persist = persistence_payload()
     print("  [5/5] prior-work citations (static)\n", flush=True)
+
+    # ---- the frequency bias, which is what the page now leads with.
+    # Derived here rather than asserted so the copy cannot drift from the data.
+    m0 = pd.read_csv(RESULTS / "metrics.csv")
+    b1 = m0[(m0.truth == "IMD") & (m0.threshold_mm == 1.0)
+            & (m0.lead_days == 1)].iloc[0]
+    bias_head = {
+        "bias": r3(b1.BIAS),
+        "forecast_wet_rate": r4((b1.hits + b1.false_alarms) / b1.n),
+        "observed_wet_rate": r4((b1.hits + b1.misses) / b1.n),
+        "excess_wet_days": int(b1.false_alarms - b1.misses),
+        "excess_pct": r3((b1.BIAS - 1) * 100),
+        "bias_by_lead": {str(int(r.lead_days)): r3(r.BIAS) for r in
+                         m0[(m0.truth == "IMD")
+                            & (m0.threshold_mm == 1.0)].itertuples()},
+        "note": ("Frequency bias is (hits + false alarms) / (hits + misses) "
+                 "-- how many wet days the forecast calls for every wet day "
+                 "that happens. It is close to flat across leads, so it is a "
+                 "property of the model, not of how far ahead it is looking. "
+                 "Persistence has a bias of 1.00 by construction, which is "
+                 "why it wins the rain direction at lead 1 despite detecting "
+                 "far less of the rain."),
+    }
 
     # ---- meta
     meta = {
         "title": "Does rainfall forecasting work in India?",
-        "question": "When the forecast says rain, how often does it rain?",
-        "headline_metric": "PPV and NPV, side by side",
+        "question": "How many days does the forecast call rain, "
+                    "against how many it rains?",
+        "headline_metric": "frequency bias, with PPV/NPV and the persistence "
+                           "benchmark as its two consequences",
         "headline_metric_reason": (
-            "The same forecast is right about 58% of the time when it says "
-            "rain and about 95% when it says dry. Reporting only the rain "
-            "direction, as a false alarm ratio alone does, understates the "
-            "forecast and answers the less common question."),
+            "The forecast calls for rain on "
+            f"{round(bias_head['forecast_wet_rate'] * 100)}% of days and rain "
+            f"falls on {round(bias_head['observed_wet_rate'] * 100)}% -- a "
+            f"frequency bias of {bias_head['bias']}. That one number explains "
+            "both the asymmetry between the two directions and the fact that "
+            "at one day ahead, repeating yesterday beats the model's rain "
+            "forecast."),
+        "bias_headline": bias_head,
         "model": FORECAST_MODEL,
         "truth": "IMD 0.25 degree gauge-based gridded daily rainfall",
         "rainfall_day": "0300-0300 UTC (24h ending 0830 IST), labelled day D",
@@ -591,7 +701,8 @@ def main() -> int:
     payload = {"meta.json": meta, "far_by_lead.json": far_by_lead,
                "costloss.json": costloss, "seasonal.json": seasonal,
                "points.json": points, "groups.json": groups,
-               "crossmodel.json": crossmodel, "methods.json": methods}
+               "crossmodel.json": crossmodel, "methods.json": methods,
+               "persistence.json": persist}
 
     total = 0
     print(f"{'file':>22} {'bytes':>10} {'KB':>8}")

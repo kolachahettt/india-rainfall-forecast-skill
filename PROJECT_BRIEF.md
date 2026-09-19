@@ -381,6 +381,7 @@ leave, not their absence.
 | 4 | `fetch_openmeteo.py --source era5` | `era5_daily.parquet` — robustness truth |
 | 5 | `extract_imd.py` | `imd_daily.parquet` — grid sampled at the 139 points |
 | 6 | `analyze.py` | `results/metrics.csv`, `results/far_truth_source_gap.csv` |
+| 7 | `persistence.py` | `results/persistence_benchmark.csv` — the naive benchmark; no new data, reads step 5 |
 
 All fetch steps are resumable: rerun and they skip what is already on disk.
 
@@ -458,12 +459,61 @@ Complete run: 139 points, **128,714 point-days**, 2024-02-11 → 2026-08-31,
 the 8° block bootstrap — roughly twice the width of the point-level
 resampling used before the correction.)*
 
-**Roughly two in five rain forecasts over India are false alarms, even at
-one-day lead** — and the rate barely improves as lead time shortens (0.423 at
-day 1 vs 0.479 at day 7, a 5.6-point spread across a whole week). BIAS sits at
-1.43–1.56 throughout: the model forecasts rain about half again as often as it
-occurs. For a farmer deciding whether to spray, the lead time is almost
-irrelevant to how much the forecast can be trusted.
+**The finding is the frequency bias, and everything else follows from it.**
+The model calls rain on 34.9% of days; rain falls on 23.6%. BIAS = **1.48** at
+lead 1 and sits at 1.43–1.56 across the whole week, so it is a property of the
+model rather than of how far ahead it is reaching — 14,560 more wet days than
+happened. Two independent consequences:
+
+1. **The two directions come apart.** PPV 0.577 against NPV 0.947 at lead 1.
+   A model that over-calls a minority event is necessarily wrong more often
+   when it says rain and right more often when it says dry.
+2. **It loses to persistence in the rain direction at lead 1** (see below).
+
+Both were measured separately; neither was assumed from the other.
+
+*Earlier framing, superseded:* the page and this brief previously led with
+"roughly two in five rain forecasts are false alarms." That is still true
+(FAR 0.423 at lead 1) but it reports one direction of a two-directional
+result and does not name the cause. The bias is the cause.
+
+### The persistence benchmark — and the one result that goes against the model
+
+Murphy (1992) requires the reference standard to be the most accurate *naive*
+method available. For daily rainfall occurrence at short lead that is
+persistence, not climatology. Computed from data already on disk
+(`src/persistence.py`), on the matched sample, with a paired 8° block
+bootstrap so both systems are scored on the same resampled blocks.
+
+Lead-L persistence = the observation from L days before the target — only
+information the decision-maker actually has at issue time.
+
+| ≥1 mm, lead 1 | ECMWF | persistence | difference | paired 95% CI |
+|---|---|---|---|---|
+| **PPV** | 0.577 | **0.623** | **−0.046** | **(−0.074, −0.016)** |
+| NPV | **0.947** | 0.883 | +0.064 | — |
+| POD | **0.853** | 0.621 | +0.232 | — |
+| HSS | **0.566** | 0.506 | +0.061 | (+0.030, +0.090) |
+| BIAS | 1.48 | 1.00 | — | — |
+
+**ECMWF loses the rain direction at lead 1.** The interval excludes zero and
+ECMWF was ahead in 8 of 4,000 bootstrap draws. At ≥2.5 mm it is a statistical
+tie with persistence nominally ahead (0.562 vs 0.546, CI −0.042 to +0.012).
+
+This is *the same bias showing up a second way*. Persistence has BIAS = 1.00
+by construction — it emits the observed wet-day distribution, shifted a day —
+so it buys success ratio at the cost of detection (POD 0.621 vs 0.853). ECMWF
+wins every other metric at lead 1, and wins PPV too from lead 2 onward, peaking
+at +0.054 (≥1 mm) and +0.086 (≥2.5 mm) at lead 4–5.
+
+**The five-day boundary.** Day-1-held persistence — repeating the most recent
+observation at every lead, which for L > 1 uses information the
+decision-maker does not have — is the *ceiling* on any persistence rule, not a
+competitor. At ≥1 mm that ceiling is HSS 0.506. ECMWF is above it through lead
+5 (0.516) and below it at leads 6 (0.502) and 7 (0.487): **beyond about five
+days its overall skill is no better than knowing yesterday's weather.** At
+≥2.5 mm it holds the line to lead 7 (0.461 against a ceiling of 0.460) — a
+dead heat, not a win. Stated on the page as its own result.
 
 **Read the lead-time trend from the paired test, not from the table above.**
 The block-bootstrap intervals for lead 1 and lead 7 overlap, which does not

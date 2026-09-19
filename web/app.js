@@ -110,12 +110,19 @@ function lineChart(holder, o) {
     }
   });
   o.series.forEach((s) => {
-    e("polyline", { points: s.pts.map((p) => `${X(p[0])},${Y(p[1])}`).join(" "),
-      fill: "none", stroke: s.colour, "stroke-width": 2,
-      "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+    const pl = e("polyline",
+      { points: s.pts.map((p) => `${X(p[0])},${Y(p[1])}`).join(" "),
+        fill: "none", stroke: s.colour, "stroke-width": s.dash ? 1.7 : 2,
+        "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+    /* a dashed series is a benchmark, not a measurement of the subject —
+       keep it visually subordinate: thinner, no markers, lighter */
+    if (s.dash) {
+      pl.setAttribute("stroke-dasharray", s.dash);
+      pl.setAttribute("stroke-opacity", "0.85");
+    }
     /* markers only when the series is sparse enough for them to mean
        something — a dot on all 49 alpha steps is noise, not data */
-    if (o.markers !== false && s.pts.length <= 12) {
+    if (o.markers !== false && !s.dash && s.pts.length <= 12) {
       s.pts.forEach((p) => {
         e("circle", { cx: X(p[0]), cy: Y(p[1]), r: 4.2, fill: s.colour,
           stroke: css("--surface-1"), "stroke-width": 2 }, svg);
@@ -259,10 +266,42 @@ function buildFinding() {
   const l1 = rec(1.0, 1), l7 = rec(1.0, 7);
   const ppv1 = 1 - l1.FAR, ppv7 = 1 - l7.FAR;
   const gap1 = l1.NPV - ppv1, gap7 = l7.NPV - ppv7;
+  const P = D.persist, BH = meta.bias_headline;
+  const prec = (thr, lead) => P.records.find(
+    (r) => r.threshold_mm === thr && r.lead_days === lead);
 
-  /* Lead with both directions. The rain direction alone was the old headline
-     and it understates the forecast badly: the same model on the same day is
-     far more trustworthy when it says dry. */
+  /* The frequency bias is the finding. Both of the things the page used to
+     lead with -- the asymmetry between the directions, and the persistence
+     loss at lead 1 -- are consequences of it, measured independently. */
+  $("#headSub").textContent =
+    `Over ${meta.n_point_days.toLocaleString()} cell-days at ${meta.n_points} ` +
+    `locations, ECMWF's model called for rain on ` +
+    `${Math.round(BH.forecast_wet_rate * 100)}% of days. Rain fell on ` +
+    `${Math.round(BH.observed_wet_rate * 100)}%. That gap — a frequency bias ` +
+    `of ${BH.bias.toFixed(2)} — is what produces everything else on this page.`;
+
+  const bh = $("#biasHero");
+  const bhl = h("div", {}, bh);
+  h("p", { class: "bh-num", text: BH.bias.toFixed(2) + "×" }, bhl);
+  h("p", { class: "bh-cap", text: "wet days forecast for every wet day that happened" }, bhl);
+  const bhb = h("p", { class: "bh-body" }, bh);
+  bhb.innerHTML =
+    `The model called rain on <b>${(BH.forecast_wet_rate * 100).toFixed(1)}%</b> ` +
+    `of days. Rain fell on <b>${(BH.observed_wet_rate * 100).toFixed(1)}%</b>. ` +
+    `That is <b>${BH.excess_wet_days.toLocaleString()}</b> more wet days than ` +
+    `happened. The bias barely moves with lead time — ` +
+    `${BH.bias_by_lead["1"].toFixed(2)} at one day ahead, ` +
+    `${BH.bias_by_lead["7"].toFixed(2)} at seven — so it is a property of the ` +
+    `model, not of how far ahead it is reaching.`;
+
+  $("#findingLede").textContent =
+    `Everything below follows from that one number. A model that calls rain ` +
+    `too often will be wrong more often when it says rain, and right more ` +
+    `often when it says dry. It will also lose to any rule that calls rain ` +
+    `the right number of times. Both of those happen here, and each was ` +
+    `measured separately.`;
+
+  /* consequence one: the two directions */
   const hd = $("#heroDirs");
   [["wet", "When it says rain", ppv1, "of the time it rains"],
    ["dry", "When it says dry", l1.NPV, "of the time it stays dry"]]
@@ -273,11 +312,9 @@ function buildFinding() {
       h("p", { class: "dir-tail", text: tail }, c);
     });
 
-  $("#findingLede").textContent =
-    `Across ${meta.n_point_days.toLocaleString()} cell-days at ${meta.n_points} ` +
-    `locations, a one-day-ahead rain forecast was right ` +
-    `${Math.round(ppv1 * 100)}% of the time and a dry forecast ` +
-    `${Math.round(l1.NPV * 100)}% of the time — a gap of ` +
+  $("#asymLede").textContent =
+    `A one-day-ahead rain forecast was right ${Math.round(ppv1 * 100)}% of ` +
+    `the time and a dry forecast ${Math.round(l1.NPV * 100)}% — a gap of ` +
     `${Math.round(gap1 * 100)} percentage points from the same model on the ` +
     `same day. Lead time does not treat the two alike. Over a week the dry ` +
     `direction loses only ${Math.round((l1.NPV - l7.NPV) * 100)} points ` +
@@ -289,19 +326,85 @@ function buildFinding() {
 
   const ex = D.methods.asymmetry;
   $("#asymWhy").textContent =
-    `Rain falls on ${Math.round(l1.hits + l1.misses) / l1.n * 100 | 0}% of days ` +
-    `in this sample, so "dry" is the common outcome and a forecast of dry ` +
-    `starts from a position most days vindicate. "Rain" is the rarer call and ` +
-    `has to earn its keep against a base rate working against it. That is ` +
-    `arithmetic about how often it rains, not evidence the model handles rain ` +
-    `badly — the same asymmetry would appear for a good model in any dry ` +
-    `climate. The test is whether it survives where rain is common, and it ` +
-    `mostly does: the dry direction is the more reliable one at ` +
+    `Two things drive it, and neither is the model's handling of rain. Rain ` +
+    `falls on ${Math.round(BH.observed_wet_rate * 100)}% of days here, so ` +
+    `"dry" is the common outcome and a forecast of dry starts from a ` +
+    `position most days vindicate. On top of that the model calls rain ` +
+    `${Math.round(BH.excess_pct)}% more often than rain happens, which loads ` +
+    `the extra calls onto the rarer side and drags the rain direction down ` +
+    `further. The same asymmetry would appear for a well-built model in any ` +
+    `dry climate. The test is whether it survives where rain is common, and ` +
+    `it mostly does: the dry direction is the more reliable one at ` +
     `${ex.n_cells - ex.n_exception_cells} of the ${ex.n_cells} cells. The ` +
     `exceptions are the two wettest — ` +
     ex.exceptions.map((e) => `${e.lat}°N ${e.lon}°E (rain on `
       + `${Math.round(e.wet_rate * 100)}% of days)`).join(" and ") +
     ` — where rain is the usual outcome and the directions swap round.`;
+
+  /* consequence two: the persistence benchmark, and the lead-1 loss */
+  const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven"];
+  const L1 = P.lead1_loss, pl1 = prec(1.0, 1);
+  /* where ECMWF's rain-direction margin over persistence is largest --
+     derived, so the sentence cannot drift if the numbers move */
+  const best = P.records.filter((r) => r.threshold_mm === 1.0)
+    .reduce((a, b) => (b.diff.PPV > a.diff.PPV ? b : a));
+  $("#persistText").innerHTML =
+    `Persistence — "it will do at the target what it did ` +
+    `<em>L</em> days before" — calls rain on exactly as many days as it ` +
+    `rains, because it is made of observed days: its frequency bias is ` +
+    `<b>${pl1.persistence.BIAS.toFixed(2)}</b> against ECMWF's ` +
+    `<b>${pl1.ecmwf.BIAS.toFixed(2)}</b>. That costs it detection — it ` +
+    `catches ${Math.round(pl1.persistence.POD * 100)}% of rain days against ` +
+    `ECMWF's ${Math.round(pl1.ecmwf.POD * 100)}% — but it buys accuracy in ` +
+    `the rain direction. At one day ahead persistence is right ` +
+    `<b>${Math.round(L1.persistence_PPV * 100)}%</b> of the time when it says ` +
+    `rain, against ECMWF's <b>${Math.round(L1.ecmwf_PPV * 100)}%</b>: a gap ` +
+    `of ${Math.abs(L1.difference * 100).toFixed(1)} points, 95% CI ` +
+    `${Math.abs(L1.ci_hi * 100).toFixed(1)} to ` +
+    `${Math.abs(L1.ci_lo * 100).toFixed(1)}, with ECMWF ahead in ` +
+    `${Math.round(L1.ecmwf_ahead_in_draws * 4000)} of 4,000 bootstrap draws. ` +
+    `<strong>At one day ahead you can beat this model's rain forecast by ` +
+    `asking whether it rained yesterday.</strong>`;
+
+  $("#persistBalance").innerHTML =
+    `That is one metric at one lead, and it is the only place ECMWF loses. ` +
+    `At the same lead it wins the dry direction by ` +
+    `${(L1.ecmwf_wins_NPV_by * 100).toFixed(1)} points, overall skill by ` +
+    `${(L1.ecmwf_wins_HSS_by * 100).toFixed(1)}, and detection by ` +
+    `${(L1.ecmwf_wins_POD_by * 100).toFixed(0)}. From two days ahead it wins ` +
+    `the rain direction as well, by up to ` +
+    `${(best.diff.PPV * 100).toFixed(1)} points at day ` +
+    `${WORDS[best.lead_days]}. ` +
+    `<strong>ECMWF's advantage at one day ahead is in the dry direction and ` +
+    `in overall skill, not the wet one.</strong> Murphy (1992): a skill score ` +
+    `has to be referenced against the most accurate naive method available, ` +
+    `and for daily rainfall occurrence at short lead that is persistence, ` +
+    `not climatology.`;
+
+  /* the five-day boundary */
+  const cr1 = P.crossing.find((c) => c.threshold_mm === 1.0);
+  const cr25 = P.crossing.find((c) => c.threshold_mm === 2.5);
+  const lastAbove = cr1.first_lead_below ? cr1.first_lead_below - 1 : 7;
+  $("#fiveDayHead").textContent = cr1.first_lead_below
+    ? `Where the forecast stops adding anything: about ${WORDS[lastAbove]} days`
+    : "The forecast stays above the persistence ceiling at every lead";
+  $("#fiveDayText").innerHTML =
+    `The best <em>any</em> persistence rule could do — repeating the most ` +
+    `recent observation at every lead, including where that is information ` +
+    `you would not actually have — scores <b>${cr1.ceiling_HSS.toFixed(3)}</b> ` +
+    `on the Heidke Skill Score. ECMWF is above that ceiling through day ` +
+    `${WORDS[lastAbove]} (${prec(1.0, lastAbove).ecmwf.HSS.toFixed(3)})` +
+    (cr1.first_lead_below
+      ? ` and below it from day ${WORDS[cr1.first_lead_below]} onward ` +
+        `(${prec(1.0, cr1.first_lead_below).ecmwf.HSS.toFixed(3)} at day ` +
+        `${WORDS[cr1.first_lead_below]}, ` +
+        `${prec(1.0, 7).ecmwf.HSS.toFixed(3)} at day seven). ` +
+        `<strong>Beyond about ${WORDS[lastAbove]} days its overall skill is ` +
+        `no better than knowing yesterday's weather.</strong>`
+      : ".") +
+    ` At the stricter ≥2.5 mm threshold it holds the line all the way: ` +
+    `${prec(2.5, 7).ecmwf.HSS.toFixed(3)} at day seven against a ceiling of ` +
+    `${cr25.ceiling_HSS.toFixed(3)} — a dead heat rather than a win.`;
 
   $("#scopeText").textContent = meta.scope_caveat;
 
@@ -314,7 +417,9 @@ function buildFinding() {
     `${fmt(pd.ci_hi, 3)}. That excludes zero, so the upward trend is real — it is ` +
     `just small. Adjacent leads (day 3 versus day 4) remain indistinguishable.`;
 
-  /* both directions, national, by lead */
+  /* both directions, national, by lead, each against its persistence
+     benchmark. Four lines is the most this chart can carry, but omitting the
+     benchmark would hide the one result that goes against the model. */
   register(() => {
     lineChart($("#chartDirs"), {
       xDomain: [1, 7], yDomain: [0.45, 1.0], xTicks: meta.leads,
@@ -322,8 +427,10 @@ function buildFinding() {
       yFmt: (v) => Math.round(v * 100) + "%",
       xLabel: "lead time (days ahead)", yLabel: "how often the forecast is right",
       hoverHead: (v) => `Lead ${v} day${v > 1 ? "s" : ""}`,
-      aria: "The dry direction stays near 95% at every lead; the rain "
-          + "direction falls from 58% to 52%",
+      aria: "ECMWF's dry direction stays near 95% at every lead and beats "
+          + "persistence throughout; its rain direction falls from 58% to "
+          + "52% and is below persistence at one day ahead, above it from "
+          + "two days on",
       series: [
         { name: "says dry → stays dry", colour: css("--s1"), label: "says dry",
           pts: meta.leads.map((L) => [L, rec(1.0, L).NPV]),
@@ -332,16 +439,44 @@ function buildFinding() {
           pts: meta.leads.map((L) => [L, 1 - rec(1.0, L).FAR]),
           band: meta.leads.map((L) => [L, 1 - rec(1.0, L).FAR_hi,
                                           1 - rec(1.0, L).FAR_lo]) },
+        { name: "yesterday, says dry", colour: css("--s1"), dash: "5 4",
+          label: false,
+          pts: meta.leads.map((L) => [L, prec(1.0, L).persistence.NPV]) },
+        { name: "yesterday, says rain", colour: css("--s2"), dash: "5 4",
+          label: false,
+          pts: meta.leads.map((L) => [L, prec(1.0, L).persistence.PPV]) },
       ],
     });
   });
   const lgd = $("#legendDirs");
-  [["says dry → it stayed dry", css("--s1")],
-   ["says rain → it rained", css("--s2")]].forEach(([nm, colour]) => {
-    const li = h("li", {}, lgd);
-    h("span", { class: "swatch line" }, li).style.background = colour;
-    li.appendChild(document.createTextNode(nm));
-  });
+  [["ECMWF says dry → it stayed dry", css("--s1"), false],
+   ["ECMWF says rain → it rained", css("--s2"), false],
+   ["persistence, dry direction", css("--s1"), true],
+   ["persistence, rain direction", css("--s2"), true]]
+    .forEach(([nm, colour, dashed]) => {
+      const li = h("li", {}, lgd);
+      const sw = h("span", { class: "swatch line" + (dashed ? " dash" : "") }, li);
+      if (dashed) {
+        sw.style.background =
+          `repeating-linear-gradient(90deg, ${colour} 0 5px,`
+          + ` transparent 5px 9px)`;
+      } else {
+        sw.style.background = colour;
+      }
+      li.appendChild(document.createTextNode(nm));
+    });
+
+  const ci = (v, lo, hi) => `${v > 0 ? "+" : ""}${fmt(v)} (${fmt(lo)} – ${fmt(hi)})`;
+  table($("#tablePersist"),
+    ["Wet day", "Lead", "ECMWF rain", "Yesterday rain", "Rain difference (95% CI)",
+     "ECMWF dry", "Yesterday dry", "ECMWF HSS", "Yesterday HSS",
+     "HSS difference (95% CI)"],
+    P.records.map((r) => [`≥${r.threshold_mm} mm`, r.lead_days,
+      fmt(r.ecmwf.PPV), fmt(r.persistence.PPV),
+      ci(r.diff.PPV, r.diff.PPV_lo, r.diff.PPV_hi),
+      fmt(r.ecmwf.NPV), fmt(r.persistence.NPV),
+      fmt(r.ecmwf.HSS), fmt(r.persistence.HSS),
+      ci(r.diff.HSS, r.diff.HSS_lo, r.diff.HSS_hi)]), 4);
 
   table($("#tableFar"),
     ["Wet day", "Lead", "FAR", "FAR 95% CI", "POD", "CSI", "HSS", "Bias", "Hits", "False alarms", "Misses"],
@@ -757,24 +892,75 @@ function renderAnswer() {
   dir("wet", "When it says rain", ppv, pLo, pHi, "of the time it rains");
   dir("dry", "When it says dry", npv, nLo, nHi, "of the time it stays dry");
 
+  /* The rain direction at lead 1 is beaten nationally by repeating
+     yesterday. The tool defaults to lead 1, so this cannot sit in a
+     footnote -- it is shown next to the number it undercuts. */
+  const pr = D.persist.records.find(
+    (r) => r.threshold_mm === 1.0 && r.lead_days === T.lead);
+  if (pr) {
+    const note = h("p", { class: "persist" }, box);
+    const eP = Math.round(pr.ecmwf.PPV * 100);
+    const pP = Math.round(pr.persistence.PPV * 100);
+    note.innerHTML = T.lead === 1
+      ? `<b>At one day ahead, yesterday is the better guide to rain.</b> `
+        + `Nationally, simply repeating yesterday's weather is right `
+        + `<b>${pP}%</b> of the time when it calls rain, against this model's `
+        + `<b>${eP}%</b>. The model's advantage at one day ahead is in the `
+        + `dry direction — ${Math.round(pr.ecmwf.NPV * 100)}% against `
+        + `${Math.round(pr.persistence.NPV * 100)}% — and in overall skill, `
+        + `not the wet one. It calls rain on `
+        + `${Math.round((pr.ecmwf.BIAS - 1) * 100)}% more days than it rains; `
+        + `yesterday, being made of real days, calls it on exactly as many. `
+        + `<span class="pn">These two comparisons are national; the `
+        + `percentages above are for your cell.</span>`
+      : `<b>Better than the null benchmark here.</b> At ${T.lead} days ahead, `
+        + `repeating the observation from ${T.lead} days before the target is `
+        + `right <b>${pP}%</b> of the time when it calls rain; this model is `
+        + `right <b>${eP}%</b>. It wins the dry direction too, `
+        + `${Math.round(pr.ecmwf.NPV * 100)}% against `
+        + `${Math.round(pr.persistence.NPV * 100)}%. `
+        + `<span class="pn">That comparison is national; the percentages `
+        + `above are for your cell.</span>`;
+  }
+
+  /* The verdict has to key off the rain figure itself, not only the gap
+     between the two. A cell can clear the gap threshold while still being
+     well short of a coin flip in the rain direction -- calling 73% "closer
+     to a coin flip" because the dry side is 91% reads as plainly wrong. */
   const gap = npv - ppv;
+  const natPPV = 1 - D.far.records.find(
+    (r) => r.truth === "IMD" && r.threshold_mm === 1.0
+      && r.lead_days === T.lead).FAR;
   const verdict = h("p", { class: "dir-verdict" }, box);
-  verdict.innerHTML = gap > 0.15
-    ? `<strong>A dry forecast here is worth trusting. A rain forecast is `
-      + `closer to a coin flip.</strong> Both come from the same model on the `
-      + `same day — the difference is which way it is pointing.`
-    : `<strong>Both directions are about equally reliable here</strong>, which `
-      + `is unusual: at most locations the dry forecast is markedly the `
-      + `safer one.`;
+  if (gap <= 0.15) {
+    verdict.innerHTML = `<strong>Both directions are about equally reliable `
+      + `here</strong>, which is unusual: at most locations the dry forecast `
+      + `is markedly the safer one.`;
+  } else {
+    const p100 = Math.round(ppv * 100);
+    const rain = ppv >= 0.65
+      ? `, and a rain forecast is better here than in most of the country — `
+        + `${p100}% against a national ${Math.round(natPPV * 100)}%.`
+      : ppv >= 0.55
+        ? `, and a rain forecast is right more often than not — but only `
+          + `just, at ${p100}%.`
+        : `. A rain forecast is closer to a coin flip, at ${p100}%.`;
+    verdict.innerHTML = `<strong>A dry forecast here is worth trusting`
+      + rain + `</strong> Both come from the same model on the same day — the `
+      + `difference is which way it is pointing, and where you are.`;
+  }
 
   h("p", { class: "context", text: `For context, rain falls here on `
     + `${Math.round(base * 100)}% of days anyway, and this forecast calls for `
     + `rain on ${Math.round(saysRain * 100)}% of days.` }, box);
 
-  h("p", { text: `That asymmetry is not a quirk of this cell. Across all 139 `
-    + `cells the dry direction is the more reliable one at every lead from 1 `
-    + `to 7 days, and it holds up better as the forecast reaches further `
-    + `ahead.` }, box);
+  const ax = D.methods.asymmetry;
+  h("p", { text: `That asymmetry is not a quirk of this cell. The dry `
+    + `direction is the more reliable one at `
+    + `${ax.n_cells - ax.n_exception_cells} of the ${ax.n_cells} cells, and `
+    + `it holds up better as the forecast reaches further ahead. It comes `
+    + `from the model calling rain on more days than it rains — nationally, `
+    + `${Math.round(D.meta.bias_headline.excess_pct)}% more.` }, box);
 
   const det = h("details", { class: "tv" }, box);
   h("summary", { text: "Show the numbers behind this" }, det);
@@ -1137,11 +1323,12 @@ async function ensureMap() {
 /* ------------------------------------------------------------------ boot */
 async function boot() {
   const names = ["meta", "far_by_lead", "costloss", "seasonal", "crossmodel",
-                 "methods", "points", "places"];
-  const [meta, far, cl, season, cross, methods, points, places] =
+                 "methods", "points", "places", "persistence"];
+  const [meta, far, cl, season, cross, methods, points, places, persist] =
     await Promise.all(names.map(
       (n) => fetch(dataURL(n + ".json")).then((r) => r.json())));
-  Object.assign(D, { meta, far, cl, season, cross, methods, points, places });
+  Object.assign(D, { meta, far, cl, season, cross, methods, points, places,
+                     persist });
   // truth-source gap is derived, not a separate file
   D.gap = far.records.filter((r) => r.truth === "ERA5").map((r) => {
     const i = far.records.find((q) => q.truth === "IMD"
