@@ -382,6 +382,7 @@ leave, not their absence.
 | 5 | `extract_imd.py` | `imd_daily.parquet` — grid sampled at the 139 points |
 | 6 | `analyze.py` | `results/metrics.csv`, `results/far_truth_source_gap.csv` |
 | 7 | `persistence.py` | `results/persistence_benchmark.csv` — the naive benchmark; no new data, reads step 5 |
+| 8 | `hamilljuras.py` | `results/hamilljuras.csv` + three checks — pooled vs stratified scoring |
 
 All fetch steps are resumable: rerun and they skip what is already on disk.
 
@@ -523,6 +524,68 @@ FAR(lead 7) − FAR(lead 1) = **+0.056, 95% CI (+0.046, +0.065)** — excludes
 zero, so the upward trend is real. Comparisons between adjacent leads are
 another matter: lead 3 vs lead 4 (0.440 vs 0.444) was never distinguishable
 and still is not.
+
+### Hamill & Juras — how much of the pooled skill is geography?
+
+Hamill, T. M. and J. Juras, 2006: *Measuring forecast skill — is it real skill
+or is it the varying climatology?* QJRMS **132**, 2905–2923.
+doi:10.1256/qj.06.25
+
+A skill score is referenced to a climatological expectation. Pooling locations
+whose climatologies differ makes that reference a mixture no location
+experiences, and the score then credits the forecast for telling wet *places*
+from dry *places* — which is free. This study pools 139 cells whose wet-day
+base rates run **5.9% to 53.6%** (sd 0.10), so the critique lands.
+
+**The demonstration, on this data.** Replace the forecast at each cell with
+one statistically independent of the observation there, holding that cell's
+real forecast rate and real base rate. Every location then has *exactly zero*
+skill. Pool those 139 tables: pooled HSS = **0.052**, which is **9%** of the
+0.566 this study reported at lead 1. Computed in closed form (independence
+makes the expected table the outer product of its margins), verified against a
+400-draw simulation at 0.0519 ± 0.0026 — 0.08 sd apart.
+
+**Pooled against stratified** (stratified = score each cell against its own
+table, then average the scores; ≥1 mm):
+
+| Metric | Lead 1 pooled | stratified | gap | paired 95% CI |
+|---|---|---|---|---|
+| **HSS** | 0.566 | **0.540** | **+0.027** | (+0.011, +0.048) |
+| PPV | 0.577 | 0.568 | +0.009 | (−0.001, +0.021) |
+| NPV | 0.947 | 0.946 | +0.001 | (−0.001, +0.003) |
+
+The HSS gap widens to +0.033 by lead 7 and excludes zero at every lead and
+both thresholds. **PPV and NPV barely move** — they are raw conditional
+probabilities with no climatological reference to distort. Pooling makes them
+a frequency-weighted composite, which changes the question they answer, not
+whether the answer is valid. This vindicates the page's choice to lead with
+the two directions rather than a skill score.
+
+Per-cell HSS at lead 1 spans −0.002 to 0.758, median 0.562, IQR 0.155. No
+cell had an undefined score for any of the three metrics.
+
+**Two claims were re-checked against the corrected score, and one moved.**
+
+* **The persistence ceiling moved by a day.** Stratification lowers the naive
+  benchmark (0.506 → 0.463) more than it lowers ECMWF (0.566 → 0.540),
+  because persistence tracks local wet-day frequency closely and so carries
+  more of the free geographic signal. The ≥1 mm crossing therefore moves from
+  lead 6 (pooled) to **lead 7 (stratified)**: ECMWF stays above the ceiling
+  through lead 6. The page now reads this off the stratified score and states
+  both. *The pooled comparison understated the model's advantage over
+  persistence.*
+* **The seasonal HSS inversion survives.** Both seasonal figures are pooled
+  and both drop under stratification (non-monsoon 0.524 → 0.458, monsoon
+  0.406 → 0.323 at lead 1), but the ranking does not flip: the inversion
+  holds at **14 of 14** threshold-and-lead combinations under either
+  reference.
+
+**Not yet corrected:** the cost–loss value score uses `E_clim = min(α, s)`
+with the *pooled* base rate `s`, so it carries the same exposure. Size
+unquantified. Listed as a known gap rather than fixed.
+
+Run by `src/hamilljuras.py` → `results/hamilljuras.csv`,
+`hj_persistence_crossing.csv`, `hj_seasonal.csv`, `hj_null_check.json`.
 
 ### The ERA5 robustness result
 

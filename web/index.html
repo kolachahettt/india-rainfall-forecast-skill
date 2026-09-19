@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Does rainfall forecasting work in India?</title>
 <meta name="description" content="A national, multi-year, lead-time-resolved verification of rainfall forecast skill over India. The forecast calls rain on half again as many days as it rains, and that single bias explains the rest.">
-<link rel="stylesheet" href="style.css?v=1e126fe3">
+<link rel="stylesheet" href="style.css?v=3af9d477">
 </head>
 <body>
 
@@ -177,6 +177,7 @@
     <div class="box">
       <h4>Why the two metrics disagree</h4>
       <p id="seasonWhy"></p>
+      <p id="seasonHJ"></p>
     </div>
   </div>
 </section>
@@ -315,6 +316,24 @@
       <div id="tableSpatial"></div>
     </div>
 
+    <h3 id="hj">Pooling locations with different climatologies inflates the skill score</h3>
+    <p id="hjIntro"></p>
+    <p id="hjNull"></p>
+    <p id="hjContrast"></p>
+    <div class="chart-card">
+      <p class="chart-title">Pooled against stratified, by metric and lead</p>
+      <p class="chart-sub">“Pooled” sums all 139 contingency tables and then scores.
+        “Stratified” scores each location against its own table and averages the
+        scores — the standard remedy. The gap is the size of the Hamill–Juras
+        effect, with a paired 95% interval from the same 8° block bootstrap.
+        The last three columns are the spread of the per-location scores, which
+        is what the pooled figure hides.</p>
+      <details class="tv"><summary>Table view — HSS, PPV and NPV, pooled against
+        stratified, every lead and both thresholds</summary>
+        <div id="tableHJ"></div></details>
+    </div>
+    <p id="hjConsequence"></p>
+
     <h3>Why some cells sit outside the national boundary</h3>
     <p id="boundaryText"></p>
     <details class="tv"><summary>Table view — every cell outside the boundary, and how far</summary>
@@ -366,6 +385,7 @@ python extract_imd.py
 python analyze.py &amp;&amp; python seasonal.py &amp;&amp; python costloss.py
 python perpoint.py &amp;&amp; python crossmodel.py
 python persistence.py                       # the naive benchmark
+python hamilljuras.py                       # pooled vs stratified scoring
 python report.py &amp;&amp; python export_web.py
 python build_places.py                      # place lookup for the tool</code></pre>
 
@@ -380,6 +400,6 @@ python build_places.py                      # place lookup for the tool</code></
   </div>
 </footer>
 
-<script src="app.js?v=1e126fe3"></script>
+<script src="app.js?v=3af9d477"></script>
 </body>
 </html>

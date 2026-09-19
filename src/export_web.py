@@ -372,6 +372,91 @@ def persistence_payload():
     }
 
 
+# ------------------------------ (8) Hamill & Juras: pooled vs stratified
+def hamilljuras_payload():
+    """Reshape results/hamilljuras.csv and the two claim-checks that depend
+    on it: where ECMWF crosses the persistence ceiling, and whether the
+    seasonal HSS inversion survives."""
+    print("  [8/8] Hamill & Juras pooled-vs-stratified ...", flush=True)
+    hj = pd.read_csv(RESULTS / "hamilljuras.csv")
+    cr = pd.read_csv(RESULTS / "hj_persistence_crossing.csv")
+    sea = pd.read_csv(RESULTS / "hj_seasonal.csv")
+    nullchk = json.loads((RESULTS / "hj_null_check.json").read_text("utf-8"))
+
+    recs = []
+    for r in hj.itertuples():
+        rec = {"threshold_mm": r.threshold_mm, "lead_days": int(r.lead_days),
+               "null_pooled": r4(r.HSS_null_pooled),
+               "null_share_of_pooled": r3(r.null_share_of_pooled)}
+        for k in ("HSS", "PPV", "NPV"):
+            rec[k] = {
+                "pooled": r3(getattr(r, f"{k}_pooled")),
+                "stratified": r3(getattr(r, f"{k}_strat")),
+                "gap": r3(getattr(r, f"{k}_gap")),
+                "gap_lo": r3(getattr(r, f"{k}_gap_lo")),
+                "gap_hi": r3(getattr(r, f"{k}_gap_hi")),
+                "gap_excludes_zero": bool(getattr(r, f"{k}_gap_lo") > 0
+                                          or getattr(r, f"{k}_gap_hi") < 0),
+                "median": r3(getattr(r, f"{k}_median")),
+                "q1": r3(getattr(r, f"{k}_q1")), "q3": r3(getattr(r, f"{k}_q3")),
+                "iqr": r3(getattr(r, f"{k}_q3") - getattr(r, f"{k}_q1")),
+                "min": r3(getattr(r, f"{k}_min")),
+                "max": r3(getattr(r, f"{k}_max")),
+                "undefined_points": int(getattr(r, f"{k}_undefined_points"))}
+        recs.append(rec)
+
+    # where ECMWF drops below the persistence ceiling, under each reference
+    crossing = {}
+    for thr in THRESHOLDS:
+        s = cr[cr.threshold_mm == thr].sort_values("lead_days")
+        below_p = [int(x.lead_days) for x in s.itertuples() if not x.above_pooled]
+        below_s = [int(x.lead_days) for x in s.itertuples() if not x.above_strat]
+        crossing[str(thr)] = {
+            "ceiling_pooled": r3(float(s.ceiling_pooled.iloc[0])),
+            "ceiling_stratified": r3(float(s.ceiling_strat.iloc[0])),
+            "first_lead_below_pooled": below_p[0] if below_p else None,
+            "first_lead_below_stratified": below_s[0] if below_s else None,
+            "ecmwf_pooled": [r3(v) for v in s.ecmwf_pooled],
+            "ecmwf_stratified": [r3(v) for v in s.ecmwf_strat]}
+
+    base = hj.iloc[0]
+    return {
+        "records": recs,
+        "base_rate_spread": {"min": r3(base.base_rate_min),
+                             "max": r3(base.base_rate_max),
+                             "sd": r3(base.base_rate_sd)},
+        "crossing": crossing,
+        "seasonal_inversion": {
+            "n_cells": int(len(sea)),
+            "holds_pooled": int(sea.inversion_pooled.sum()),
+            "holds_stratified": int(sea.inversion_strat.sum()),
+            "example_lead1": {
+                "non_monsoon_pooled": r3(float(sea[(sea.threshold_mm == 1.0)
+                                                   & (sea.lead_days == 1)].non_pooled.iloc[0])),
+                "monsoon_pooled": r3(float(sea[(sea.threshold_mm == 1.0)
+                                               & (sea.lead_days == 1)].mon_pooled.iloc[0])),
+                "non_monsoon_stratified": r3(float(sea[(sea.threshold_mm == 1.0)
+                                                       & (sea.lead_days == 1)].non_strat.iloc[0])),
+                "monsoon_stratified": r3(float(sea[(sea.threshold_mm == 1.0)
+                                                   & (sea.lead_days == 1)].mon_strat.iloc[0]))}},
+        "null_check": {k: (r4(v) if isinstance(v, float) else v)
+                       for k, v in nullchk.items()},
+        "citation": ("Hamill, T. M. and J. Juras, 2006: Measuring forecast "
+                     "skill -- is it real skill or is it the varying "
+                     "climatology? Q. J. R. Meteorol. Soc. 132, 2905-2923. "
+                     "doi:10.1256/qj.06.25"),
+        "what_is_exposed": (
+            "A skill score is referenced to a climatological expectation. "
+            "Pooling locations with different climatologies makes that "
+            "reference a mixture no location experiences, and the score then "
+            "rewards the forecast for telling wet PLACES from dry PLACES. "
+            "Raw conditional probabilities -- PPV, NPV, POD, FAR, BIAS -- do "
+            "not have a climatological reference and are not inflated by "
+            "this; pooling makes them a frequency-weighted composite, which "
+            "is a question of interpretation rather than of validity."),
+    }
+
+
 # ----------------------------------- lattice vs the political boundary
 def boundary_check():
     """How many lattice cells fall outside India's drawn boundary, and how far.
@@ -433,6 +518,7 @@ def main() -> int:
     reliab = split_half(df)
     spatial = spatial_structure()
     persist = persistence_payload()
+    hjuras = hamilljuras_payload()
     print("  [5/5] prior-work citations (static)\n", flush=True)
 
     # ---- the frequency bias, which is what the page now leads with.
@@ -702,7 +788,7 @@ def main() -> int:
                "costloss.json": costloss, "seasonal.json": seasonal,
                "points.json": points, "groups.json": groups,
                "crossmodel.json": crossmodel, "methods.json": methods,
-               "persistence.json": persist}
+               "persistence.json": persist, "hamilljuras.json": hjuras}
 
     total = 0
     print(f"{'file':>22} {'bytes':>10} {'KB':>8}")

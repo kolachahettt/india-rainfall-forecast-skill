@@ -1,0 +1,10 @@
+{
+ "threshold_mm": 1.0,
+ "lead_days": 1,
+ "n_sim": 400,
+ "closed_form": 0.05208585245119161,
+ "simulated_mean": 0.05187649234849451,
+ "simulated_sd": 0.002643952735333942,
+ "sd_apart": 0.07918451033530163,
+ "note": "The closed form is the exact expectation under independence at every point; the simulation is only a check that it was derived correctly."
+}

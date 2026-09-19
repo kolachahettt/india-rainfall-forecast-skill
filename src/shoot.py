@@ -32,7 +32,8 @@ OUT = ROOT / "screenshots"
 URL = "http://localhost:8137/"
 WIDTHS = [375, 800, 1440]
 SECTIONS = [("tool", "#tool"), ("finding", "#finding"), ("costloss", "#costloss"),
-            ("seasonal", "#seasonal"), ("map", "#map"), ("era5", "#era5")]
+            ("seasonal", "#seasonal"), ("map", "#map"), ("era5", "#era5"),
+            ("methods", "#methods")]
 CHROME_CANDIDATES = [
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",

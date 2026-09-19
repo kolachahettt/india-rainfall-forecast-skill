@@ -381,30 +381,38 @@ function buildFinding() {
     `and for daily rainfall occurrence at short lead that is persistence, ` +
     `not climatology.`;
 
-  /* the five-day boundary */
-  const cr1 = P.crossing.find((c) => c.threshold_mm === 1.0);
-  const cr25 = P.crossing.find((c) => c.threshold_mm === 2.5);
-  const lastAbove = cr1.first_lead_below ? cr1.first_lead_below - 1 : 7;
-  $("#fiveDayHead").textContent = cr1.first_lead_below
+  /* Where the forecast stops beating the persistence ceiling. This has to
+     be read off the STRATIFIED score, not the pooled one: pooling flatters
+     persistence more than it flatters the model, so the pooled comparison
+     puts the crossing a day too early. Both are stated. */
+  const HJ = D.hj, hx1 = HJ.crossing["1.0"], hx25 = HJ.crossing["2.5"];
+  const belowS = hx1.first_lead_below_stratified;
+  const belowP = hx1.first_lead_below_pooled;
+  const lastAbove = belowS ? belowS - 1 : 7;
+  $("#fiveDayHead").textContent = belowS
     ? `Where the forecast stops adding anything: about ${WORDS[lastAbove]} days`
     : "The forecast stays above the persistence ceiling at every lead";
   $("#fiveDayText").innerHTML =
     `The best <em>any</em> persistence rule could do — repeating the most ` +
     `recent observation at every lead, including where that is information ` +
-    `you would not actually have — scores <b>${cr1.ceiling_HSS.toFixed(3)}</b> ` +
-    `on the Heidke Skill Score. ECMWF is above that ceiling through day ` +
-    `${WORDS[lastAbove]} (${prec(1.0, lastAbove).ecmwf.HSS.toFixed(3)})` +
-    (cr1.first_lead_below
-      ? ` and below it from day ${WORDS[cr1.first_lead_below]} onward ` +
-        `(${prec(1.0, cr1.first_lead_below).ecmwf.HSS.toFixed(3)} at day ` +
-        `${WORDS[cr1.first_lead_below]}, ` +
-        `${prec(1.0, 7).ecmwf.HSS.toFixed(3)} at day seven). ` +
+    `you would not actually have — is the ceiling on this comparison. ` +
+    `Scored the way a skill score should be, location by location against ` +
+    `each location's own climatology, that ceiling is ` +
+    `<b>${hx1.ceiling_stratified.toFixed(3)}</b> on the Heidke Skill Score. ` +
+    `ECMWF is above it through day ${WORDS[lastAbove]} ` +
+    `(${hx1.ecmwf_stratified[lastAbove - 1].toFixed(3)})` +
+    (belowS
+      ? ` and below it at day ${WORDS[belowS]} ` +
+        `(${hx1.ecmwf_stratified[belowS - 1].toFixed(3)}). ` +
         `<strong>Beyond about ${WORDS[lastAbove]} days its overall skill is ` +
         `no better than knowing yesterday's weather.</strong>`
-      : ".") +
+      : " and at every lead out to seven days.") +
     ` At the stricter ≥2.5 mm threshold it holds the line all the way: ` +
-    `${prec(2.5, 7).ecmwf.HSS.toFixed(3)} at day seven against a ceiling of ` +
-    `${cr25.ceiling_HSS.toFixed(3)} — a dead heat rather than a win.`;
+    `${hx25.ecmwf_stratified[6].toFixed(3)} at day seven against a ceiling ` +
+    `of ${hx25.ceiling_stratified.toFixed(3)} — a dead heat rather than a ` +
+    `win. <a href="#hj">Pooled scores put the ≥1 mm crossing a day earlier, ` +
+    `at day ${WORDS[belowP]}, because pooling flatters the naive benchmark ` +
+    `more than it flatters the model — see the methods note.</a>`;
 
   $("#scopeText").textContent = meta.scope_caveat;
 
@@ -478,13 +486,20 @@ function buildFinding() {
       fmt(r.ecmwf.HSS), fmt(r.persistence.HSS),
       ci(r.diff.HSS, r.diff.HSS_lo, r.diff.HSS_hi)]), 4);
 
+  /* HSS is shown twice on purpose: the pooled figure for continuity with
+     everything published before, and the stratified one because the pooled
+     figure is inflated by base-rate heterogeneity across the 139 cells. */
+  const hjOf = (thr, lead) => HJ.records.find(
+    (r) => r.threshold_mm === thr && r.lead_days === lead);
   table($("#tableFar"),
-    ["Wet day", "Lead", "FAR", "FAR 95% CI", "POD", "CSI", "HSS", "Bias", "Hits", "False alarms", "Misses"],
+    ["Wet day", "Lead", "FAR", "FAR 95% CI", "POD", "CSI", "HSS (pooled)",
+     "HSS (stratified)", "Bias", "Hits", "False alarms", "Misses"],
     fbl.records.filter((r) => r.truth === "IMD")
       .sort((a, b) => a.threshold_mm - b.threshold_mm || a.lead_days - b.lead_days)
       .map((r) => [`≥${r.threshold_mm} mm`, r.lead_days, fmt(r.FAR),
         `${fmt(r.FAR_lo)} – ${fmt(r.FAR_hi)}`, fmt(r.POD), fmt(r.CSI),
-        fmt(r.HSS), fmt(r.BIAS, 2), r.hits.toLocaleString(),
+        fmt(r.HSS), fmt(hjOf(r.threshold_mm, r.lead_days).HSS.stratified),
+        fmt(r.BIAS, 2), r.hits.toLocaleString(),
         r.false_alarms.toLocaleString(), r.misses.toLocaleString()]), 2);
 }
 
@@ -585,6 +600,22 @@ function buildSeasonal() {
     `error is both more likely and degrades faster with lead time: false alarm ratio ` +
     `climbs ${fmt(get(non, 1.0, 7).FAR - n1.FAR, 3)} from day 1 to day 7, against ` +
     `${fmt(get(mon, 1.0, 7).FAR - m1.FAR, 3)} during the monsoon.`;
+
+  /* Both seasonal HSS figures are pooled across the 139 cells, so both carry
+     the base-rate inflation described in the methods. Checked, because the
+     inversion is this section's entire claim: it survives. */
+  const si = D.hj.seasonal_inversion, ex1 = si.example_lead1;
+  $("#seasonHJ").innerHTML =
+    `Both HSS figures here are pooled across the 139 cells, which inflates ` +
+    `them. <a href="#hj">Scoring each cell against its own climatology and ` +
+    `then averaging</a> lowers both — at one day ahead, non-monsoon ` +
+    `${ex1.non_monsoon_pooled.toFixed(3)} → ` +
+    `${ex1.non_monsoon_stratified.toFixed(3)} and monsoon ` +
+    `${ex1.monsoon_pooled.toFixed(3)} → ` +
+    `${ex1.monsoon_stratified.toFixed(3)} — but it does not reverse them. ` +
+    `The inversion holds at ${si.holds_stratified} of ${si.n_cells} ` +
+    `threshold-and-lead combinations either way, so it is a real property of ` +
+    `the metric and not an artefact of pooling.`;
 
   const pal = [[mon, css("--s1")], [non, css("--s2")]];
   const holder = $("#chartSeason");
@@ -762,6 +793,77 @@ function buildMethods() {
   table($("#tableSpatial"), ["Separation", "Pairs", "Mean correlation"],
     me.spatial.wet_dry_correlation_vs_distance.map(
       (b) => [`${b.km_from}–${b.km_to} km`, b.pairs.toLocaleString(), fmt(b.mean_r, 3)]), 2);
+
+  /* ---- Hamill & Juras: how much of the pooled skill is geography? ---- */
+  const HJ = D.hj;
+  const hjr = (thr, L) => HJ.records.find(
+    (r) => r.threshold_mm === thr && r.lead_days === L);
+  const h1 = hjr(1.0, 1), h7 = hjr(1.0, 7), bs = HJ.base_rate_spread;
+
+  $("#hjIntro").innerHTML =
+    `A skill score is measured against a climatological expectation. This ` +
+    `study pools ${meta.n_points} locations whose wet-day base rates run ` +
+    `from <b>${Math.round(bs.min * 100)}%</b> to ` +
+    `<b>${Math.round(bs.max * 100)}%</b>, so the pooled expectation is a ` +
+    `mixture no single location experiences — and the score then credits ` +
+    `the forecast for telling wet <em>places</em> from dry <em>places</em>, ` +
+    `which is free. Hamill and Juras (2006) showed this can produce ` +
+    `apparent skill from forecasts with none.`;
+
+  $("#hjNull").innerHTML =
+    `<strong>Measured on this data.</strong> Replace the forecast at every ` +
+    `cell with one that is statistically independent of what happened ` +
+    `there, keeping that cell's real forecast rate and real base rate. ` +
+    `Every location then has exactly zero skill by construction. Pool those ` +
+    `${meta.n_points} tables and the Heidke Skill Score comes out at ` +
+    `<b>${HJ.null_check.closed_form.toFixed(3)}</b> — ` +
+    `${Math.round(h1.null_share_of_pooled * 100)}% of the ` +
+    `${h1.HSS.pooled.toFixed(3)} this study reports at one day ahead, from ` +
+    `base-rate spread alone. That figure is exact rather than simulated ` +
+    `(independence makes the expected table the outer product of its ` +
+    `margins); a ${HJ.null_check.n_sim}-draw simulation agrees at ` +
+    `${HJ.null_check.simulated_mean.toFixed(4)} ± ` +
+    `${HJ.null_check.simulated_sd.toFixed(4)}.`;
+
+  $("#hjContrast").innerHTML =
+    `<strong>It does not hit everything equally, and that is the point.</strong> ` +
+    `Scoring each cell against its own climatology and averaging the scores ` +
+    `lowers HSS by <b>${h1.HSS.gap.toFixed(3)}</b> at one day ahead ` +
+    `(${h1.HSS.pooled.toFixed(3)} → ${h1.HSS.stratified.toFixed(3)}; 95% CI ` +
+    `on the gap ${fmt(h1.HSS.gap_lo)} to ${fmt(h1.HSS.gap_hi)}, excluding ` +
+    `zero) and by ${h7.HSS.gap.toFixed(3)} at seven days. The same treatment ` +
+    `moves the rain direction by only ${h1.PPV.gap.toFixed(3)} and the dry ` +
+    `direction by ${h1.NPV.gap.toFixed(3)}. PPV, NPV, POD, FAR and bias have ` +
+    `no climatological reference to distort — pooling makes them a ` +
+    `frequency-weighted composite, which changes what question they answer, ` +
+    `not whether the answer is valid.`;
+
+  table($("#tableHJ"),
+    ["Metric", "Wet day", "Lead", "Pooled", "Stratified", "Gap",
+     "Gap 95% CI", "Across cells: median", "IQR", "Range"],
+    ["HSS", "PPV", "NPV"].flatMap((k) => HJ.records.map((r) => {
+      const v = r[k];
+      return [k, `≥${r.threshold_mm} mm`, r.lead_days, fmt(v.pooled),
+        fmt(v.stratified), (v.gap > 0 ? "+" : "") + fmt(v.gap),
+        `${fmt(v.gap_lo)} – ${fmt(v.gap_hi)}`, fmt(v.median), fmt(v.iqr),
+        `${fmt(v.min)} – ${fmt(v.max)}`];
+    })), 5);
+
+  $("#hjConsequence").innerHTML =
+    `<strong>What was changed because of this.</strong> The skill-score ` +
+    `column in the study table now shows both figures. The ` +
+    `<a href="#finding">persistence ceiling</a> is read off the stratified ` +
+    `score, which moved the ≥1 mm crossing from day ` +
+    `${HJ.crossing["1.0"].first_lead_below_pooled} to day ` +
+    `${HJ.crossing["1.0"].first_lead_below_stratified}: pooling inflates the ` +
+    `naive benchmark more than it inflates the model ` +
+    `(${HJ.crossing["1.0"].ceiling_pooled.toFixed(3)} → ` +
+    `${HJ.crossing["1.0"].ceiling_stratified.toFixed(3)} for the ceiling, ` +
+    `against ${h1.HSS.pooled.toFixed(3)} → ${h1.HSS.stratified.toFixed(3)} ` +
+    `for ECMWF), so the pooled comparison understated the model's advantage. ` +
+    `<a href="#seasonal">The seasonal inversion</a> was checked the same way ` +
+    `and survives. Nothing on this page now rests on a pooled skill score ` +
+    `alone.`;
 
   const b = me.boundary;
   $("#boundaryText").textContent =
@@ -1323,12 +1425,12 @@ async function ensureMap() {
 /* ------------------------------------------------------------------ boot */
 async function boot() {
   const names = ["meta", "far_by_lead", "costloss", "seasonal", "crossmodel",
-                 "methods", "points", "places", "persistence"];
-  const [meta, far, cl, season, cross, methods, points, places, persist] =
+                 "methods", "points", "places", "persistence", "hamilljuras"];
+  const [meta, far, cl, season, cross, methods, points, places, persist, hj] =
     await Promise.all(names.map(
       (n) => fetch(dataURL(n + ".json")).then((r) => r.json())));
   Object.assign(D, { meta, far, cl, season, cross, methods, points, places,
-                     persist });
+                     persist, hj });
   // truth-source gap is derived, not a separate file
   D.gap = far.records.filter((r) => r.truth === "ERA5").map((r) => {
     const i = far.records.find((q) => q.truth === "IMD"
