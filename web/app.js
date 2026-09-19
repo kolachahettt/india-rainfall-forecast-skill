@@ -655,7 +655,9 @@ function buildMethods() {
    cell-days are a constant, so each cell's 2x2 table can be recovered and
    its own cost-loss curve evaluated. Recombined nationally this reproduces
    results/metrics.csv to 0.03% (rounding in the stored 3dp figures). */
-const T = { place: null, cell: null, dist: 0, lead: 3 };
+// lead 1 matches the headline pair in the finding section; a different
+// default made the same place show two different numbers on one page
+const T = { place: null, cell: null, dist: 0, lead: 1 };
 
 function cellDays() {
   return Math.round(D.meta.n_point_days / D.meta.n_points);
