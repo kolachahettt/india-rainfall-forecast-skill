@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Does rainfall forecasting work in India?</title>
 <meta name="description" content="A national, multi-year, lead-time-resolved verification of rainfall forecast skill over India. Two in five rain forecasts are false alarms, and a week of lead time barely changes that.">
-<link rel="stylesheet" href="style.css?v=b2ad98a9">
+<link rel="stylesheet" href="style.css?v=1daf789c">
 </head>
 <body>
 
@@ -96,27 +96,25 @@
         forecast reaches further ahead.</p>
       <div class="chart-holder" id="chartDirs"></div>
       <ul class="legend" id="legendDirs"></ul>
-    </div>
-
-    <div class="chart-card">
-      <p class="chart-title">The rain direction alone, at two wet-day thresholds</p>
-      <p class="chart-sub">False alarm ratio: the share of “rain” forecasts on which no
-        rain was measured. This is the mirror of the orange line above — lower is
-        better here.</p>
-      <div class="chart-holder" id="chartFar"></div>
-      <ul class="legend" id="legendFar"></ul>
-      <details class="tv"><summary>Table view — all metrics, all leads</summary>
+      <details class="tv"><summary>Table view — both wet-day thresholds, every
+        metric, every lead</summary>
+        <p class="chart-sub" style="margin:.6rem 0 0">A stricter threshold
+          (≥2.5 mm) shifts the rain direction about three points, but the
+          confidence intervals overlap at every lead, so the two are not
+          distinguishable here. The numbers are below rather than charted as
+          two separated lines.</p>
         <div id="tableFar"></div></details>
-    </div>
 
     <div class="box why">
-      <h4>Why false alarm ratio, and not a standard skill score</h4>
-      <p>A false alarm is a spray the farmer skipped and should have made — the error
-         with a direct cost attached. Conventional skill scores disagree with it, and
-         not by a little: the Heidke Skill Score rates the <em>dry</em> season as the
-         better-forecast one while the false alarm ratio rates it worse, because HSS
-         is rewarded by the abundant correct “no rain” calls of a season that is
-         mostly dry. <a href="#seasonal">The seasonal split shows the inversion.</a></p>
+      <h4>Why two numbers and not one skill score</h4>
+      <p>A single score has to collapse both directions into one figure, and the
+         weighting it picks is rarely the one your decision uses. The Heidke Skill
+         Score, for instance, is rewarded by correct “no rain” calls — so it rates a
+         mostly-dry season as the better-forecast one at the very moment a farmer is
+         seeing <em>more</em> false alarms, not fewer. Reporting the two directions
+         separately avoids choosing a weighting on the reader's behalf: whichever way
+         your forecast is pointing today, the relevant number is right there.
+         <a href="#seasonal">The seasonal split shows that inversion in full.</a></p>
     </div>
 
     <div class="box">
@@ -130,7 +128,34 @@
   </div>
 </section>
 
-<!-- ========================================================== 3 COST-LOSS -->
+<!-- =========================================================== 3 SEASONAL -->
+<section id="seasonal">
+  <div class="wrap">
+    <p class="eyebrow">When is it worse?</p>
+    <h2>The dry season is worse for the farmer and better on paper</h2>
+
+    <p class="lede" id="seasonLede"></p>
+
+    <div class="chart-card">
+      <p class="chart-title">The same two seasons, ranked oppositely by two metrics</p>
+      <p class="chart-sub">Two separate scales, shown side by side rather than on one pair of
+        axes. In the left panel higher is worse; in the right panel higher is better.
+        The non-monsoon line sits above in both — which means worse on the left and
+        better on the right. That is the inversion.</p>
+      <div class="chart-holder" id="chartSeason"></div>
+      <ul class="legend" id="legendSeason"></ul>
+      <details class="tv"><summary>Table view — all metrics, both seasons, all leads</summary>
+        <div id="tableSeason"></div></details>
+    </div>
+
+    <div class="box">
+      <h4>Why the two metrics disagree</h4>
+      <p id="seasonWhy"></p>
+    </div>
+  </div>
+</section>
+
+<!-- ========================================================== 4 COST-LOSS -->
 <section id="costloss">
   <div class="wrap">
     <p class="eyebrow">Is it worth acting on? · nationally</p>
@@ -167,33 +192,6 @@
   </div>
 </section>
 
-<!-- =========================================================== 4 SEASONAL -->
-<section id="seasonal">
-  <div class="wrap">
-    <p class="eyebrow">When is it worse?</p>
-    <h2>The dry season is worse for the farmer and better on paper</h2>
-
-    <p class="lede" id="seasonLede"></p>
-
-    <div class="chart-card">
-      <p class="chart-title">The same two seasons, ranked oppositely by two metrics</p>
-      <p class="chart-sub">Two separate scales, shown side by side rather than on one pair of
-        axes. In the left panel higher is worse; in the right panel higher is better.
-        The non-monsoon line sits above in both — which means worse on the left and
-        better on the right. That is the inversion.</p>
-      <div class="chart-holder" id="chartSeason"></div>
-      <ul class="legend" id="legendSeason"></ul>
-      <details class="tv"><summary>Table view — all metrics, both seasons, all leads</summary>
-        <div id="tableSeason"></div></details>
-    </div>
-
-    <div class="box">
-      <h4>Why the two metrics disagree</h4>
-      <p id="seasonWhy"></p>
-    </div>
-  </div>
-</section>
-
 <!-- ================================================================ 5 MAP -->
 <section id="map">
   <div class="wrap">
@@ -221,6 +219,7 @@
           <div id="mapHolder" class="skeleton">Map data loads when you scroll here…</div>
           <ul class="binlegend" id="binLegend"></ul>
           <p class="chart-sub" style="margin-top:.7rem" id="mapCaption"></p>
+          <p class="chart-sub" id="mapNoDry"></p>
         </div>
         <div class="readout" id="readout">
           <h4>Selected cell</h4>
@@ -238,17 +237,19 @@
 <section id="era5">
   <div class="wrap">
     <p class="eyebrow">If you are replicating this</p>
-    <h2>Do not use a reanalysis as your rainfall truth</h2>
+    <h2>A reanalysis flatters the one direction that was already weak</h2>
 
     <p class="lede" id="era5Lede"></p>
 
     <div class="chart-card">
       <p class="chart-title">The same forecasts, scored against two different “truths”</p>
-      <p class="chart-sub">False alarm ratio for ECMWF IFS, measured against IMD gauge
-        observations and against the ERA5 reanalysis. Same forecasts, same days,
-        same places — only the yardstick changes.</p>
+      <p class="chart-sub">Same forecasts, same days, same places — only the yardstick
+        changes. The distortion is almost entirely on the left: swapping gauges for
+        a reanalysis rewrites the rain direction and leaves the dry one where it was.</p>
       <div class="chart-holder" id="chartEra5"></div>
       <ul class="legend" id="legendEra5"></ul>
+      <details class="tv"><summary>Table view — both directions, both truths, every
+        lead</summary><div id="tableEra5"></div></details>
     </div>
 
     <h3>Is it just that ERA5 is scoring its own homework?</h3>
@@ -352,6 +353,6 @@ python build_places.py                      # place lookup for the tool</code></
   </div>
 </footer>
 
-<script src="app.js?v=b2ad98a9"></script>
+<script src="app.js?v=1daf789c"></script>
 </body>
 </html>

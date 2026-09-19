@@ -1,6 +1,7 @@
 """Render results/metrics.csv into a markdown summary and two figures.
 
-FAR leads, everywhere: it is the metric with a cost attached.
+The headline is the pair of directions: how often a rain forecast is
+right, and how often a dry one is.
 """
 from __future__ import annotations
 
@@ -59,7 +60,7 @@ def fig_all(res: pd.DataFrame) -> None:
             ax.grid(alpha=0.3)
             ax.set_xticks(LEADS)
             if r == 0:
-                ax.set_title(m + ("  ← headline" if m == "FAR" else ""))
+                ax.set_title(m)
             if c == 0:
                 ax.set_ylabel(f"≥{thr} mm\n")
             if r == len(THRESHOLDS) - 1:
@@ -118,8 +119,10 @@ def main() -> int:
         "blocks (not individual points — rainfall is spatially correlated, "
         "and point-level resampling halves the interval width).",
         "",
-        "**FAR is the headline: a false alarm is a spray the farmer skipped "
-        "and should have made.**",
+        "**The headline is the pair of directions.** The same forecast is "
+        "right about 58% of the time when it says rain and about 95% when it "
+        "says dry; a false alarm ratio alone reports only the first and "
+        "understates the forecast.",
         "",
     ]
     for thr in THRESHOLDS:

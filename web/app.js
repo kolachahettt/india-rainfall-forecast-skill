@@ -343,29 +343,6 @@ function buildFinding() {
     li.appendChild(document.createTextNode(nm));
   });
 
-  const cols = [[1.0, css("--s1"), "≥1 mm"], [2.5, css("--s2"), "≥2.5 mm"]];
-  register(() => {
-    lineChart($("#chartFar"), {
-      xDomain: [1, 7], yDomain: [0.3, 0.6],
-      xTicks: [1, 2, 3, 4, 5, 6, 7], yTicks: [0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6],
-      yFmt: (v) => Math.round(v * 100) + "%",
-      xLabel: "lead time (days ahead)", yLabel: "false alarm ratio",
-      hoverHead: (v) => `Lead ${v} day${v > 1 ? "s" : ""}`,
-      aria: "False alarm ratio rising slightly with lead time, for two wet-day thresholds",
-      series: cols.map(([thr, colour, name]) => ({
-        name, colour, label: name,
-        pts: meta.leads.map((L) => [L, rec(thr, L).FAR]),
-        band: meta.leads.map((L) => [L, rec(thr, L).FAR_lo, rec(thr, L).FAR_hi]),
-      })),
-    });
-  });
-  const lg = $("#legendFar");
-  cols.forEach(([, colour, name]) => {
-    const li = h("li", {}, lg);
-    h("span", { class: "swatch line" }, li).style.background = colour;
-    li.appendChild(document.createTextNode(`wet day ${name} — IMD gauge truth`));
-  });
-
   table($("#tableFar"),
     ["Wet day", "Lead", "FAR", "FAR 95% CI", "POD", "CSI", "HSS", "Bias", "Hits", "False alarms", "Misses"],
     fbl.records.filter((r) => r.truth === "IMD")
@@ -528,39 +505,79 @@ function buildEra5() {
   const fbl = D.far, xm = D.cross;
   const rec = (truth, L) => fbl.records.find(
     (r) => r.truth === truth && r.threshold_mm === 1.0 && r.lead_days === L);
-  const g1 = D.gap.find((g) => g.threshold_mm === 1.0 && g.lead_days === 1);
+  const ppv = (r) => 1 - r.FAR;
+  const d1 = ppv(rec("ERA5", 1)) - ppv(rec("IMD", 1));
+  const n1 = rec("ERA5", 1).NPV - rec("IMD", 1).NPV;
 
   $("#era5Lede").textContent =
-    `Rain gauges are scarce and reanalyses are convenient, so it is tempting to verify ` +
-    `against ERA5. Doing that here would have cut the measured false alarm ratio roughly ` +
-    `in half — from ${pct(rec("IMD", 1).FAR)} to ${pct(rec("ERA5", 1).FAR)} at one day ` +
-    `— and made the forecast look almost unbiased (frequency bias ` +
-    `${fmt(rec("ERA5", 1).BIAS, 2)} against ${fmt(rec("IMD", 1).BIAS, 2)}). Every ` +
-    `conclusion on this page would have been kinder to the forecast, in the one ` +
-    `direction that matters least to a farmer.`;
+    `Rain gauges are scarce and reanalyses are convenient, so it is tempting ` +
+    `to verify against ERA5. Doing that here would have moved the rain ` +
+    `direction by ${Math.round(d1 * 100)} percentage points — from ` +
+    `${Math.round(ppv(rec("IMD", 1)) * 100)}% right up to ` +
+    `${Math.round(ppv(rec("ERA5", 1)) * 100)}% — while moving the dry ` +
+    `direction by ${Math.round(Math.abs(n1) * 100)} ` +
+    `${Math.round(Math.abs(n1) * 100) === 1 ? "point" : "points"}, slightly ` +
+    `the wrong way. A reanalysis does not make the forecast look uniformly better: it ` +
+    `flatters precisely the direction that was already the weak one, and ` +
+    `leaves the trustworthy direction alone. Any study reporting only a false ` +
+    `alarm ratio against reanalysis truth is reporting the distorted half.`;
 
   const pal = [["IMD", css("--s1"), "IMD gauge truth"],
                ["ERA5", css("--s2"), "ERA5 reanalysis truth"]];
+  const panels = [
+    { key: "rain", title: "When it says rain — higher is better",
+      get: (t2, L) => ppv(rec(t2, L)),
+      lo: (t2, L) => 1 - rec(t2, L).FAR_hi, hi: (t2, L) => 1 - rec(t2, L).FAR_lo,
+      dom: [0.45, 0.95], ticks: [0.5, 0.6, 0.7, 0.8, 0.9] },
+    { key: "dry", title: "When it says dry — higher is better",
+      get: (t2, L) => rec(t2, L).NPV,
+      lo: (t2, L) => rec(t2, L).NPV_lo, hi: (t2, L) => rec(t2, L).NPV_hi,
+      dom: [0.45, 0.95], ticks: [0.5, 0.6, 0.7, 0.8, 0.9] },
+  ];
+  const holder = $("#chartEra5");
   register(() => {
-    lineChart($("#chartEra5"), {
-      xDomain: [1, 7], yDomain: [0.1, 0.55], xTicks: [1, 2, 3, 4, 5, 6, 7],
-      yTicks: [0.1, 0.2, 0.3, 0.4, 0.5], yFmt: (v) => Math.round(v * 100) + "%",
-      xLabel: "lead time (days ahead)", yLabel: "false alarm ratio",
-      hoverHead: (v) => `Lead ${v} day${v > 1 ? "s" : ""}`,
-      aria: "False alarm ratio is about half as large when scored against ERA5",
-      series: pal.map(([t, colour, name]) => ({
-        name, colour, label: t === "IMD" ? "gauge" : "ERA5",
-        pts: [1, 2, 3, 4, 5, 6, 7].map((L) => [L, rec(t, L).FAR]),
-        band: [1, 2, 3, 4, 5, 6, 7].map((L) => [L, rec(t, L).FAR_lo, rec(t, L).FAR_hi]),
-      })),
+    holder.innerHTML = "";
+    const grid = h("div", {}, holder);
+    grid.style.display = "grid";
+    grid.style.gap = "1rem";
+    grid.style.gridTemplateColumns =
+      holder.clientWidth >= 700 ? "1fr 1fr" : "1fr";
+    panels.forEach((pn) => {
+      const cell = h("div", {}, grid);
+      const cap = h("p", { class: "chart-sub", text: pn.title }, cell);
+      cap.style.cssText = "margin:0 0 .35rem;font-weight:620";
+      cap.style.color = css("--ink-2");
+      lineChart(h("div", {}, cell), {
+        xDomain: [1, 7], yDomain: pn.dom, xTicks: D.meta.leads,
+        yTicks: pn.ticks, yFmt: (v) => Math.round(v * 100) + "%",
+        height: 250, xLabel: "lead (days)", padRight: 16,
+        hoverHead: (v) => `Lead ${v} day${v > 1 ? "s" : ""}`,
+        aria: `${pn.key} direction, scored against gauges and against ERA5`,
+        series: pal.map(([t2, colour, nm]) => ({
+          name: nm, colour, label: false,
+          pts: D.meta.leads.map((L) => [L, pn.get(t2, L)]),
+          band: D.meta.leads.map((L) => [L, pn.lo(t2, L), pn.hi(t2, L)]),
+        })),
+      });
     });
   });
   const lg = $("#legendEra5");
-  pal.forEach(([, colour, name]) => {
+  pal.forEach(([, colour, nm]) => {
     const li = h("li", {}, lg);
     h("span", { class: "swatch line" }, li).style.background = colour;
-    li.appendChild(document.createTextNode(name));
+    li.appendChild(document.createTextNode(nm));
   });
+
+  table($("#tableEra5"),
+    ["Lead", "Says rain → rained (gauge)", "(ERA5)", "shift",
+     "Says dry → stayed dry (gauge)", "(ERA5)", "shift"],
+    D.meta.leads.map((L) => {
+      const i = rec("IMD", L), e = rec("ERA5", L);
+      return [L, fmt(ppv(i)), fmt(ppv(e)),
+        (ppv(e) - ppv(i) >= 0 ? "+" : "") + fmt(ppv(e) - ppv(i)),
+        fmt(i.NPV), fmt(e.NPV),
+        (e.NPV - i.NPV >= 0 ? "+" : "") + fmt(e.NPV - i.NPV)];
+    }), 3);
 
   const ic = xm.records.find((r) => r.model === "ICON" && r.threshold_mm === 1.0 && r.lead_days === 1);
   const gf = xm.records.find((r) => r.model === "GFS" && r.threshold_mm === 1.0 && r.lead_days === 1);
@@ -1000,6 +1017,7 @@ function drawMap() {
       + `meteorological subdivision. There are ${new Set(D.groups.records.map((r) => r.cell)).size} `
       + `of them against IMD's 36, and the boundaries do not correspond.`;
   $("#mapCaption").textContent = cap;
+  $("#mapNoDry").textContent = D.methods.asymmetry.map_note;
 
   const bl = $("#binLegend"); bl.innerHTML = "";
   BINS.forEach((b, i) => {

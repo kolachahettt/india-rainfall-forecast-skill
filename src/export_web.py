@@ -358,10 +358,12 @@ def main() -> int:
     meta = {
         "title": "Does rainfall forecasting work in India?",
         "question": "When the forecast says rain, how often does it rain?",
-        "headline_metric": "FAR",
+        "headline_metric": "PPV and NPV, side by side",
         "headline_metric_reason": (
-            "A false alarm means a farmer skipped a spray he should have "
-            "made. It is the error with a direct cost attached."),
+            "The same forecast is right about 58% of the time when it says "
+            "rain and about 95% when it says dry. Reporting only the rain "
+            "direction, as a false alarm ratio alone does, understates the "
+            "forecast and answers the less common question."),
         "model": FORECAST_MODEL,
         "truth": "IMD 0.25 degree gauge-based gridded daily rainfall",
         "rainfall_day": "0300-0300 UTC (24h ending 0830 IST), labelled day D",
@@ -533,7 +535,28 @@ def main() -> int:
                         "wet_rate": r3(v1[7] / (meta["n_point_days"]
                                                 // meta["n_points"])),
                         "ppv": r3(1 - v1[0]), "npv": r3(v1[8])})
+    def spread(fn):
+        v = np.array([fn(p_["m"]["1.0"]["1"]) for p_ in points["points"]])
+        q1, q3 = np.percentile(v, [25, 75])
+        return {"iqr": r3(q3 - q1), "min": r3(v.min()), "max": r3(v.max()),
+                "median": r3(np.median(v))}
+    ppv_s = spread(lambda v: 1 - v[0])
+    npv_s = spread(lambda v: v[8])
+    top_bin = float(np.mean([p_["m"]["1.0"]["1"][8] >= 0.9
+                             for p_ in points["points"]]))
+
     asym = {"n_cells": len(points["points"]),
+            "ppv_spread": ppv_s, "npv_spread": npv_s,
+            "npv_share_above_90pct": r3(top_bin),
+            "map_note": ("There is no dry-direction map because there would "
+                         "be nothing to see. Across cells the dry direction "
+                         f"has an interquartile range of {npv_s['iqr']} "
+                         f"against {ppv_s['iqr']} for the rain direction, and "
+                         f"{round(top_bin * 100)}% of cells sit above 90%, so "
+                         "a binned map would be a single flat colour. That "
+                         "uniformity is a finding, not an omission: the dry "
+                         "direction is dependable more or less everywhere, "
+                         "while the rain direction is where place matters."),
             "n_exception_cells": len(exc), "exceptions": exc,
             "note": ("The dry direction is the more reliable one at 137 of "
                      "the 139 cells. The exceptions are the two wettest "
