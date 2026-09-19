@@ -1,0 +1,51 @@
+name: Deploy site to GitHub Pages
+
+# The site is the web/ directory: static HTML, hand-built SVG charts and a
+# precomputed JSON payload. Nothing is built or fetched here — the analysis
+# runs locally and its output is committed — so this just publishes web/ as-is.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sanity-check the payload before publishing
+        run: |
+          set -e
+          cd web
+          test -f index.html
+          for f in meta far_by_lead costloss seasonal crossmodel methods points groups; do
+            python3 -c "import json,sys; json.load(open('data/$f.json'))" \
+              || { echo "data/$f.json is missing or not valid JSON"; exit 1; }
+          done
+          python3 -c "import json; json.load(open('data/india_outline.geojson'))"
+          echo "payload OK: $(du -sh data | cut -f1) across $(ls data | wc -l) files"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deployment
+        uses: actions/deploy-pages@v4
