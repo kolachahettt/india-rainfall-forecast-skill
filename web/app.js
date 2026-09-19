@@ -516,8 +516,11 @@ function buildCostLoss() {
     `climatological rule over roughly α = ${fmt(s1.alpha_min_positive, 2)} to ` +
     `${fmt(s1.alpha_max_positive, 2)}. What erodes with lead time is the size of the ` +
     `benefit, not whether there is one: peak value falls from ${fmt(s1.max_V, 2)} at ` +
-    `one day to ${fmt(s7.max_V, 2)} at seven. Even at its best the forecast captures ` +
-    `about two-thirds of what perfect foresight would be worth.`;
+    `one day to ${fmt(s7.max_V, 2)} at seven. Scoring each cell against its own ` +
+    `climatology rather than the national one lowers those to ` +
+    `${fmt(s1.max_V_strat, 2)} and ${fmt(s7.max_V_strat, 2)} without moving the ` +
+    `window at all, so at its very best the forecast captures a little over half ` +
+    `of what perfect foresight would be worth.`;
 
   const picks = [[1, css("--s1")], [4, css("--s2")], [7, css("--s3")]];
   register(() => {
@@ -538,7 +541,16 @@ function buildCostLoss() {
         return { name: `lead ${L}`, colour, pts,
           label: i === 1 ? false : `day ${L}`,
           labelDy: i === 0 ? -10 : 20 };
-      }),
+      }).concat(picks.map(([L, colour]) => {
+        /* the same curves with each cell scored against its OWN
+           climatology. The zero crossings land in exactly the same place --
+           that is the point of drawing them -- but the peaks are lower. */
+        const c = cl.curves.find((x) => x.threshold_mm === 1.0 && x.lead_days === L);
+        const pts = c.alpha.map((a, j) => [a, c.V_strat[j]])
+          .filter((p) => p[1] >= -0.4);
+        return { name: `lead ${L}, per-cell climatology`, colour, pts,
+          dash: "4 3", label: false };
+      })),
     });
   });
   const lg = $("#legendCl");
@@ -547,8 +559,36 @@ function buildCostLoss() {
     h("span", { class: "swatch line" }, li).style.background = colour;
     li.appendChild(document.createTextNode(`lead ${L} day${L > 1 ? "s" : ""} (wet day ≥1 mm)`));
   });
+  const ld = h("li", {}, lg);
+  h("span", { class: "swatch line dash" }, ld).style.background =
+    `repeating-linear-gradient(90deg, ${css("--muted")} 0 4px,`
+    + ` transparent 4px 7px)`;
+  ld.appendChild(document.createTextNode(
+    "dashed: each cell against its own climatology"));
   h("li", { text: "above the zero line = worth acting on" }, lg)
     .style.color = css("--muted");
+
+  /* Hamill & Juras on the value score: the window survives, the peak does
+     not. Stated here rather than in methods because the window IS this
+     section's headline and a reader deserves to know it was checked. */
+  const hc = D.cl.hamilljuras;
+  $("#clHJ").innerHTML =
+    `<strong>The break-even window survives the Hamill–Juras objection; the ` +
+    `peak value does not.</strong> <code>E_clim = min(α, s)</code> uses the ` +
+    `<em>pooled</em> base rate, which is the same defect ` +
+    `<a href="#hj">stratification fixed in the skill score</a>: a cell where ` +
+    `it rains on 6% of days and one where it rains on 54% were both credited ` +
+    `against the same 24% reference. Rescoring every cell against its own ` +
+    `climatology leaves the window <b>identical at all ` +
+    `${hc.window_identical_cells} of ${hc.n_cells}</b> threshold-and-lead ` +
+    `combinations — maximum edge shift ${hc.max_window_edge_shift.toFixed(2)}. ` +
+    `That is structural, not luck: acting on the forecast beats climatology ` +
+    `exactly when α lies between 1&nbsp;−&nbsp;NPV and PPV, and both are ` +
+    `conditional probabilities with no climatological reference to distort. ` +
+    `The height of the curve is a different matter — the peak is overstated ` +
+    `by up to <b>${hc.peak_gap_max.toFixed(3)}</b>, about ` +
+    `${Math.round(hc.peak_gap_pct_max)}%. Both curves are drawn above; the ` +
+    `dashed ones are the corrected version.`;
 
   register(() => {
     rangeChart($("#chartClWindow"), {

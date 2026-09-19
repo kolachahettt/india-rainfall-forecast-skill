@@ -601,27 +601,73 @@ def main() -> int:
 
     # ---- cost-loss
     cl = pd.read_csv(RESULTS / "costloss_value.csv")
+    cls = pd.read_csv(RESULTS / "costloss_stratified.csv")
     curves, summary = [], []
     for thr in THRESHOLDS:
         for lead in LEADS:
             s = cl[(cl.threshold_mm == thr) & (cl.lead_days == lead)]
             grid = s[s.V_lo.isna()].sort_values("alpha")
             pos = grid[grid.V > 0]
+            poss = grid[grid.V_strat > 0]
             curves.append({"threshold_mm": thr, "lead_days": int(lead),
                            "alpha": [r3(a) for a in grid.alpha],
-                           "V": [r3(v) for v in grid.V]})
+                           "V": [r3(v) for v in grid.V],
+                           "V_strat": [r3(v) for v in grid.V_strat]})
             ci = s[s.V_lo.notna()]
             summary.append({
                 "threshold_mm": thr, "lead_days": int(lead),
                 "base_rate": r4(s.base_rate.iloc[0]),
                 "alpha_min_positive": r3(pos.alpha.min()) if len(pos) else None,
                 "alpha_max_positive": r3(pos.alpha.max()) if len(pos) else None,
+                "alpha_min_positive_strat": r3(poss.alpha.min()) if len(poss) else None,
+                "alpha_max_positive_strat": r3(poss.alpha.max()) if len(poss) else None,
                 "max_V": r3(grid.V.max()),
+                "max_V_strat": r3(grid.V_strat.max()),
                 "argmax_alpha": r3(grid.loc[grid.V.idxmax(), "alpha"]),
                 "ci_points": [{"alpha": r3(c.alpha), "V": r3(c.V),
+                               "V_strat": r3(c.V_strat),
                                "V_lo": r3(c.V_lo), "V_hi": r3(c.V_hi)}
                               for c in ci.itertuples()]})
+
+    # Hamill & Juras applied to the value score. The break-even WINDOW turns
+    # out to be immune, which is not luck: V > 0 exactly when alpha lies in
+    # [1 - NPV, PPV], and those two are conditional probabilities that
+    # pooling barely touches. The MAGNITUDE of V is not immune.
+    win_same = int(((cls.win_pooled_lo == cls.win_strat_lo)
+                    & (cls.win_pooled_hi == cls.win_strat_hi)).sum())
+    hj_cl = {
+        "window_identical_cells": win_same, "n_cells": int(len(cls)),
+        "max_window_edge_shift": r3(float(max(
+            (cls.win_pooled_lo - cls.win_strat_lo).abs().max(),
+            (cls.win_pooled_hi - cls.win_strat_hi).abs().max()))),
+        "peak_gap_max": r3(float((cls.maxV_pooled - cls.maxV_strat).max())),
+        "peak_gap_pct_max": r3(float(((cls.maxV_pooled - cls.maxV_strat)
+                                      / cls.maxV_pooled).max() * 100)),
+        # column names like "V0.1_gap" are not identifiers, so itertuples
+        # would rename them to positional _N. Use dict records instead.
+        "by_lead": [{"threshold_mm": r["threshold_mm"],
+                     "lead_days": int(r["lead_days"]),
+                     "max_V_pooled": r3(r["maxV_pooled"]),
+                     "max_V_strat": r3(r["maxV_strat"]),
+                     "gap_at_0.1": r3(r["V0.1_gap"]),
+                     "gap_at_0.3": r3(r["V0.3_gap"]),
+                     "gap_at_0.3_lo": r3(r["V0.3_gap_lo"]),
+                     "gap_at_0.3_hi": r3(r["V0.3_gap_hi"])}
+                    for r in cls.to_dict("records")],
+        "verdict": (
+            "The break-even window is unaffected: identical at every "
+            f"threshold and lead, maximum edge shift 0.00. That is "
+            "structural rather than lucky -- the forecast beats climatology "
+            "exactly when alpha lies between 1 - NPV and PPV, and both are "
+            "conditional probabilities with no climatological reference to "
+            "distort. The MAGNITUDE of the value score is affected: the peak "
+            "is overstated by up to "
+            f"{r3(float((cls.maxV_pooled - cls.maxV_strat).max()))}, about "
+            f"{round(float(((cls.maxV_pooled - cls.maxV_strat) / cls.maxV_pooled).max() * 100))}%. "
+            "Both curves are drawn."),
+    }
     costloss = {"curves": curves, "summary": summary,
+                "hamilljuras": hj_cl,
                 "assumptions": [
                     "Binary decision: protect or do not protect, once per day.",
                     "Cost C is paid whenever action is taken, event or not.",
@@ -634,7 +680,10 @@ def main() -> int:
                     "says wet. No probability threshold exists to tune, so "
                     "this is one operating point, not an ROC curve.",
                     "The climatological reference knows the base rate but "
-                    "nothing about any given day.",
+                    "nothing about any given day. Which base rate matters: "
+                    "the solid curves use the pooled national rate, the "
+                    "dashed ones each cell's own. The break-even window is "
+                    "the same either way; the peak is not.",
                     "Risk-neutral: expected expense only, variance ignored.",
                     "No cost of lead time; acting 7 days ahead costs the same "
                     "as acting 1 day ahead, with no option to defer.",

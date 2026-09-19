@@ -67,6 +67,72 @@ def value(M: np.ndarray, alpha: np.ndarray) -> np.ndarray:
     return np.where(np.isfinite(v), v, np.nan)
 
 
+# --------------------------------------------------------------------------
+# Hamill & Juras applied to the value score.
+#
+# E_clim = min(alpha, s) uses the POOLED base rate s, which is the same defect
+# stratification fixed in the skill score: it hands every location a
+# climatological fallback that no location actually has. A cell where it rains
+# on 6% of days and one where it rains on 54% are being credited against the
+# same 24% reference.
+#
+# Two corrected aggregates, because "the average location" and "the whole
+# country's bill" are different questions:
+#
+#   strat_mean     V computed at each cell against that cell's own s_i, then
+#                  averaged over cells. The value to a typical location.
+#   strat_expense  sum each expense term over cells first, each with its own
+#                  s_i, and form the ratio once. The total expense actually
+#                  saved by decision-makers spread over all 139 cells. This is
+#                  the closer analogue of the pooled figure and the one to
+#                  quote against it.
+#
+# A prediction worth recording before running it: V > 0 exactly when
+# alpha lies in [c/(c+d), a/(a+b)] = [1 - NPV, PPV]. The break-even WINDOW is
+# therefore a function of the two conditional probabilities alone, and those
+# barely moved under stratification (0.009 and 0.001). So the window should be
+# close to unchanged even if the magnitude of V is not.
+# --------------------------------------------------------------------------
+def value_per_cell(M: np.ndarray, alpha: np.ndarray) -> np.ndarray:
+    """(n_cells, n_alpha) value, each cell against its OWN climatology."""
+    a, b, c, d = (M[:, i].astype(float)[:, None] for i in range(4))
+    n = a + b + c + d
+    s = (a + c) / n
+    al = np.asarray(alpha, float)[None, :]
+    e_f = al * (a + b) / n + c / n
+    e_cl = np.minimum(al, s)
+    e_pf = al * s
+    with np.errstate(divide="ignore", invalid="ignore"):
+        v = (e_cl - e_f) / (e_cl - e_pf)
+    return np.where(np.isfinite(v), v, np.nan)
+
+
+def value_strat_mean(M, alpha):
+    return np.nanmean(value_per_cell(M, alpha), axis=0)
+
+
+def value_strat_expense(M, alpha):
+    """Aggregate the EXPENSES across cells, each against its own s_i, then
+    take the ratio once. Cells are equally weighted here because every cell
+    contributes the same number of days."""
+    a, b, c, d = (M[:, i].astype(float)[:, None] for i in range(4))
+    n = a + b + c + d
+    s = (a + c) / n
+    al = np.asarray(alpha, float)[None, :]
+    e_f = (al * (a + b) / n + c / n).sum(axis=0)
+    e_cl = np.minimum(al, s).sum(axis=0)
+    e_pf = (al * s).sum(axis=0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        v = (e_cl - e_f) / (e_cl - e_pf)
+    return np.where(np.isfinite(v), v, np.nan)
+
+
+def window(alphas, v):
+    """The alpha range over which V > 0, or None."""
+    pos = alphas[v > 0]
+    return (float(pos.min()), float(pos.max())) if len(pos) else None
+
+
 def main() -> int:
     fc = pd.read_parquet(INTERIM / "forecast_daily.parquet")
     imd = pd.read_parquet(INTERIM / "imd_daily.parquet")
@@ -100,6 +166,7 @@ def main() -> int:
             n = a + b + c + d
             s = (a + c) / n
             v = value(M, ALPHAS)
+            v_strat = value_strat_expense(M, ALPHAS)
             pos = ALPHAS[v > 0]
             rng_txt = (f"{pos.min():.2f} - {pos.max():.2f}" if len(pos)
                        else "none (never beats clim)")
@@ -118,13 +185,15 @@ def main() -> int:
                   f"{ALPHAS[imax]:>9.2f} {value(M,np.array([0.1]))[0]:>9.3f} "
                   f"{value(M,np.array([0.3]))[0]:>9.3f}")
             for a0, (lo, hi) in cis.items():
+                j = int(np.argmin(np.abs(ALPHAS - a0)))
                 rows.append(dict(threshold_mm=thr, lead_days=lead, alpha=a0,
                                  V=float(value(M, np.array([a0]))[0]),
+                                 V_strat=float(v_strat[j]),
                                  V_lo=lo, V_hi=hi, base_rate=s))
-            for al, vv in zip(ALPHAS, v):
+            for al, vv, vst in zip(ALPHAS, v, v_strat):
                 rows.append(dict(threshold_mm=thr, lead_days=lead, alpha=al,
-                                 V=float(vv), V_lo=np.nan, V_hi=np.nan,
-                                 base_rate=s))
+                                 V=float(vv), V_strat=float(vst),
+                                 V_lo=np.nan, V_hi=np.nan, base_rate=s))
         print(f"     (climatological rule is 'always act' when alpha < s, "
               f"'never act' when alpha > s)")
 
@@ -132,6 +201,62 @@ def main() -> int:
         subset=["threshold_mm", "lead_days", "alpha"], keep="first")
     out.to_csv(RESULTS / "costloss_value.csv", index=False)
     print(f"\nwrote {RESULTS/'costloss_value.csv'}")
+
+    # ---- Hamill & Juras exposure of the value score ---------------------
+    print("\n===== pooled vs stratified climatology in E_clim =====")
+    srows, ALPHA_CI = [], (0.10, 0.20, 0.30, 0.50)
+    for thr in THRESHOLDS:
+        o = df["imd_mm"].to_numpy() >= thr
+        print(f"\n  wet day >= {thr} mm")
+        print(f"  {'lead':>4} {'window pooled':>16} {'window strat':>16} "
+              f"{'V@.1 pool':>10} {'strat':>7} {'gap':>7} "
+              f"{'V@.3 pool':>10} {'strat':>7} {'gap':>7} {'maxV p/s':>13}")
+        for lead in LEADS:
+            f = df[f"precipitation_previous_day{lead}"].to_numpy() >= thr
+            M = np.zeros((len(uniq), 4), dtype=np.int64)
+            np.add.at(M, (codes, 0), (f & o))
+            np.add.at(M, (codes, 1), (f & ~o))
+            np.add.at(M, (codes, 2), (~f & o))
+            np.add.at(M, (codes, 3), (~f & ~o))
+            vp = value(M, ALPHAS)
+            vs = value_strat_expense(M, ALPHAS)
+            vm = value_strat_mean(M, ALPHAS)
+            wp, ws = window(ALPHAS, vp), window(ALPHAS, vs)
+            rec = {"threshold_mm": thr, "lead_days": lead,
+                   "win_pooled_lo": wp[0], "win_pooled_hi": wp[1],
+                   "win_strat_lo": ws[0], "win_strat_hi": ws[1],
+                   "maxV_pooled": float(np.nanmax(vp)),
+                   "maxV_strat": float(np.nanmax(vs)),
+                   "argmax_pooled": float(ALPHAS[int(np.nanargmax(vp))]),
+                   "argmax_strat": float(ALPHAS[int(np.nanargmax(vs))])}
+            # paired block bootstrap on the gap, one draw scoring both
+            for a0 in ALPHA_CI:
+                aa = np.array([a0])
+                acc = np.empty(N_BOOT)
+                for i in range(N_BOOT):
+                    sel = np.concatenate(
+                        [rbb[k] for k in RNG.integers(0, len(ub), size=len(ub))])
+                    acc[i] = (value(M[sel], aa)[0]
+                              - value_strat_expense(M[sel], aa)[0])
+                j = int(np.argmin(np.abs(ALPHAS - a0)))
+                rec |= {f"V{a0}_pooled": float(vp[j]),
+                        f"V{a0}_strat": float(vs[j]),
+                        f"V{a0}_mean": float(vm[j]),
+                        f"V{a0}_gap": float(vp[j] - vs[j]),
+                        f"V{a0}_gap_lo": float(np.nanpercentile(acc, 2.5)),
+                        f"V{a0}_gap_hi": float(np.nanpercentile(acc, 97.5))}
+            srows.append(rec)
+            print(f"  {lead:>4} {wp[0]:>7.2f}-{wp[1]:<8.2f} "
+                  f"{ws[0]:>7.2f}-{ws[1]:<8.2f} "
+                  f"{rec['V0.1_pooled']:>10.3f} {rec['V0.1_strat']:>7.3f} "
+                  f"{rec['V0.1_gap']:>+7.3f} "
+                  f"{rec['V0.3_pooled']:>10.3f} {rec['V0.3_strat']:>7.3f} "
+                  f"{rec['V0.3_gap']:>+7.3f} "
+                  f"{rec['maxV_pooled']:>6.3f}/{rec['maxV_strat']:<6.3f}",
+                  flush=True)
+    sdf = pd.DataFrame(srows)
+    sdf.to_csv(RESULTS / "costloss_stratified.csv", index=False)
+    print(f"\nwrote {RESULTS/'costloss_stratified.csv'}")
 
     print("\n=== V at alpha = 0.10 and 0.30, with 8-deg block bootstrap CI ===")
     ci = pd.read_csv(RESULTS / "costloss_value.csv")

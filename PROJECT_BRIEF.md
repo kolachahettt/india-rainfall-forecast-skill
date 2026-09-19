@@ -622,9 +622,30 @@ cell had an undefined score for any of the three metrics.
   holds at **14 of 14** threshold-and-lead combinations under either
   reference.
 
-**Not yet corrected:** the cost–loss value score uses `E_clim = min(α, s)`
-with the *pooled* base rate `s`, so it carries the same exposure. Size
-unquantified. Listed as a known gap rather than fixed.
+**The cost–loss value score was checked too, and it splits.** `E_clim =
+min(α, s)` uses the *pooled* base rate, so it has the same defect: a cell at
+5.9% and one at 53.6% were both credited against the same 23.6% reference.
+Rescoring every cell against its own climatology (`value_strat_expense` in
+`costloss.py` — sum each expense term over cells, each with its own `s_i`,
+then take the ratio once):
+
+* **The break-even window is untouched.** Identical at all 14
+  threshold-and-lead combinations; maximum edge shift **0.00**. This is
+  structural rather than lucky. V > 0 exactly when
+  α ∈ [c/(c+d), a/(a+b)] = **[1 − NPV, PPV]**, and both bounds are
+  conditional probabilities with no climatological reference in them — the
+  same reason they barely moved in the table above. **Section 3's headline
+  claim survives the objection intact.**
+* **The magnitude does not.** The peak value is overstated by up to
+  **0.105 (≈19%)** — at ≥1 mm lead 1, 0.656 pooled against 0.574 stratified.
+  The gap is largest around α = 0.2–0.4 and vanishes at both ends of the
+  window, where the climatological rule dominates identically either way. At
+  α = 0.30, ≥1 mm lead 1: 0.585 → 0.533, gap +0.052, paired 95% CI (+0.012,
+  +0.120).
+
+Both curves are now drawn on the page, solid pooled and dashed stratified,
+and they converge exactly at the zero crossings — which is the visual form of
+the argument. `results/costloss_stratified.csv`.
 
 Run by `src/hamilljuras.py` → `results/hamilljuras.csv`,
 `hj_persistence_crossing.csv`, `hj_seasonal.csv`, `hj_null_check.json`.
