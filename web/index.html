@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Does rainfall forecasting work in India?</title>
 <meta name="description" content="A national, multi-year, lead-time-resolved verification of rainfall forecast skill over India. The forecast calls rain on half again as many days as it rains, and that single bias explains the rest.">
-<link rel="stylesheet" href="style.css?v=3af9d477">
+<link rel="stylesheet" href="style.css?v=0a9563ca">
 </head>
 <body>
 
@@ -363,15 +363,12 @@
     <ul class="tight" id="priorWork"></ul>
 
     <h3>The place lookup is not analysis data</h3>
-    <p>The decision tool turns a typed place name into coordinates so it can
-       snap to the nearest of the 139 grid cells. That lookup is 700 Indian
-       places — every state and district headquarters plus the most populous
-       remaining towns — from <a href="https://www.geonames.org/">GeoNames</a>,
-       CC&nbsp;BY&nbsp;4.0, rebuilt by <code>src/build_places.py</code>.
-       <strong>No number on this page is derived from it.</strong> It only
-       decides which measured cell you are shown; the measurement itself is
-       unchanged whether you reach a cell by typing, by map click, or by
-       browser location.</p>
+    <p id="placesText"></p>
+    <details class="tv"><summary>How each district's entry was located, and
+      what the routes mean</summary>
+      <ul class="tight" id="placesRoutes"></ul>
+      <p class="step-hint" id="placesRouteNote"></p></details>
+    <p id="placesCaveat"></p>
 
     <h3>Reproduce it</h3>
     <p>Every number on this page regenerates from cached inputs and is byte-identical
@@ -400,6 +397,6 @@ python build_places.py                      # place lookup for the tool</code></
   </div>
 </footer>
 
-<script src="app.js?v=3af9d477"></script>
+<script src="app.js?v=0a9563ca"></script>
 </body>
 </html>

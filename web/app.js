@@ -849,6 +849,57 @@ function buildMethods() {
         `${fmt(v.min)} – ${fmt(v.max)}`];
     })), 5);
 
+  /* ---- the place lookup: state what it actually covers ---------------- */
+  const pc = D.places.coverage;
+  const ROUTE_LABEL = {
+    seat_fcode: "GeoNames tags a district or sub-district seat inside the "
+      + "district, and that seat is used",
+    district_name: "no seat tag, but a place inside the district carries the "
+      + "district's own name — in India that is normally the headquarters",
+    largest_town: "neither of the above, so the district's most populous "
+      + "place stands in. These are not claimed to be headquarters: a "
+      + "district's largest town often is not its seat",
+    district_median: "no seat, no name match and no population figures "
+      + "anywhere in the district, so the entry is the median position of "
+      + "its indexed places, labelled with the district's name",
+    name_nationwide: "the district contains no indexed place at all, so a "
+      + "nationwide name match was used",
+  };
+  $("#placesText").innerHTML =
+    `The decision tool turns a typed place name into coordinates so it can ` +
+    `snap to the nearest of the ${meta.n_points} grid cells. That lookup is ` +
+    `<b>${pc.total.toLocaleString()}</b> entries from ` +
+    `<a href="https://www.geonames.org/">GeoNames</a> (CC&nbsp;BY&nbsp;4.0), ` +
+    `built by <code>src/build_places.py</code>: one for every one of the ` +
+    `<b>${pc.districts_represented}</b> second-order administrative units ` +
+    `GeoNames indexes for India — ${pc.districts_in_geonames} districts and ` +
+    `${pc.divisions_not_districts} Maharashtra revenue divisions — across ` +
+    `${pc.states_and_uts} states and union territories, plus ` +
+    `${pc.capitals_added} capitals the district pass missed and the ` +
+    `${pc.extra_towns} largest remaining towns. Typing a district name ` +
+    `finds it even where the headquarters is called something else: ` +
+    `Sirmaur reaches Nahan, Kinnaur reaches its own district entry.`;
+
+  const rl = $("#placesRoutes");
+  Object.entries(pc.by_route).sort((a, b) => b[1] - a[1]).forEach(([k, v]) => {
+    h("li", { html: `<strong>${v} district${v === 1 ? "" : "s"}</strong> — `
+      + (ROUTE_LABEL[k] || k) + "." }, rl);
+  });
+  $("#placesRouteNote").textContent =
+    `Only ${pc.by_route.seat_fcode + pc.by_route.district_name} of the ` +
+    `${pc.districts_represented} entries can be called a headquarters with a ` +
+    `straight face. The rest are a point inside the right district, which is ` +
+    `all this needs to be: the lattice spacing is about 165 km and most ` +
+    `Indian districts are smaller than that, so any point inside one usually ` +
+    `picks the same cell.`;
+
+  $("#placesCaveat").innerHTML =
+    `<strong>No number on this page is derived from it.</strong> It only ` +
+    `decides which measured cell you are shown; the measurement is unchanged ` +
+    `whether you reach a cell by typing, by map click, or by browser ` +
+    `location — and the tool always tells you which cell it picked and how ` +
+    `far away it is.`;
+
   $("#hjConsequence").innerHTML =
     `<strong>What was changed because of this.</strong> The skill-score ` +
     `column in the study table now shows both figures. The ` +
@@ -1096,31 +1147,60 @@ function buildTool() {
   h("span", { class: "step-hint", text: "days ahead" }, leadRow)
     .style.cssText = "align-self:center;margin-left:.4rem";
 
+  /* places.json layout: [name, state, district, lat, lon, population].
+     `district` is empty when it duplicates the name, which is the usual case
+     for a headquarters. */
   const inp = $("#tLoc"), sug = $("#tSuggest");
   const hideSug = () => { sug.hidden = true; sug.innerHTML = ""; };
+
+  /* Rank rather than take the first eight in file order, which is what this
+     did before and is why searching felt arbitrary. Every token has to
+     appear somewhere in name + district + state, so "nahan himachal" and
+     "sirmaur" both reach Nahan; the rank is then how well the query matches
+     the NAME, with population breaking ties. */
+  const rank = (p, q, toks) => {
+    const n = p[0].toLowerCase(), d = (p[2] || "").toLowerCase();
+    const s = (p[1] || "").toLowerCase();
+    const hay = `${n} ${d} ${s}`;
+    if (!toks.every((t) => hay.includes(t))) return null;
+    if (n === q) return 0;
+    if (n.startsWith(q)) return 1;
+    if (d === q || d.startsWith(q)) return 2;
+    if (n.includes(q)) return 3;
+    if (d.includes(q)) return 4;
+    return 5;
+  };
+
   inp.addEventListener("input", () => {
-    const q = inp.value.trim().toLowerCase();
+    const q = inp.value.trim().toLowerCase().replace(/\s*,\s*/g, " ");
     if (q.length < 2) return hideSug();
-    const P = D.places.places;
-    const starts = [], has = [];
-    for (const p of P) {
-      const n = p[0].toLowerCase();
-      if (n.startsWith(q)) starts.push(p);
-      else if (n.includes(q)) has.push(p);
-      if (starts.length >= 8) break;
+    const toks = q.split(/\s+/).filter(Boolean);
+    const scored = [];
+    for (const p of D.places.places) {
+      const r = rank(p, q, toks);
+      if (r !== null) scored.push([r, -(p[5] || 0), p]);
     }
-    const hits = starts.concat(has).slice(0, 8);
+    scored.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const hits = scored.slice(0, 8).map((x) => x[2]);
+
     sug.innerHTML = "";
     if (!hits.length) {
       h("button", { type: "button", disabled: "",
-        text: "No match — try a district or a larger town, or pick on the map."
+        text: "No match — try the district name, or pick on the map."
       }, sug);
     }
     hits.forEach((p) => {
       const b = h("button", { type: "button" }, sug);
-      b.innerHTML = `${p[0]} <span class="st">${p[1]}</span>`;
+      /* GeoNames' Indian admin2 names are not uniform: five are Maharashtra
+         revenue divisions and some already carry the word "District". Only
+         append the noun when it is actually missing. */
+      const d2 = p[2] || "";
+      const unit = /\b(District|Division|Region)$/i.test(d2)
+        ? d2 : `${d2} district`;
+      const where = d2 ? `${unit} · ${p[1]}` : p[1];
+      b.innerHTML = `${p[0]} <span class="st">${where}</span>`;
       b.addEventListener("click", () => {
-        inp.value = p[0]; hideSug(); setPlace(p[2], p[3], p[0]);
+        inp.value = p[0]; hideSug(); setPlace(p[3], p[4], p[0]);
       });
     });
     sug.hidden = false;

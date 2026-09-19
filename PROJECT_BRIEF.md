@@ -179,6 +179,48 @@ set of cities — it covers every climate region without the selection bias of
 choosing interesting places, and anyone can regenerate the identical list from a
 single `.grd` file.
 
+### The place lookup is a UI convenience, and its claim was wrong
+
+`web/data/places.json` exists only so the decision tool can turn a typed name
+into coordinates and snap to the nearest of the 139 cells. **No number on the
+page derives from it.**
+
+The first version selected "administrative seats" by GeoNames feature code
+(PPLC/PPLA/PPLA2/PPLA3) and filled to 700 by population, while the page
+claimed it held *every* state and district headquarters. It did not. GeoNames
+does not tag Indian district seats reliably — Jaisalmer is a plain `PPL` with
+67,604 people, so it was neither picked as a seat nor large enough to survive
+the population cut. Nine of eighteen sampled district headquarters were
+missing.
+
+Rebuilt to enumerate districts first. GeoNames indexes **763 second-order
+units for India — 758 districts and 5 Maharashtra revenue divisions**, across
+36 states and UTs. Every one now has an entry, located by:
+
+| Route | Count | What it is |
+|---|---|---|
+| `seat_fcode` | 166 | GeoNames tags a seat inside the district |
+| `district_name` | 367 | a place carries the district's own name |
+| `largest_town` | 221 | the district's most populous place — **not** a headquarters claim |
+| `district_median` | 7 | no seat, no name match, no population anywhere: the median position of the district's places |
+| `name_nationwide` | 2 | the district indexes no place at all (Yanam, Mahe) |
+
+Plus 11 capitals the district pass missed and the 400 largest remaining
+towns: **1,174 entries, 65 KB**.
+
+So **533 of 763 can honestly be called a headquarters**; the rest are a point
+inside the right district. That is sufficient here and the page says so: the
+lattice spacing is ~165 km and most Indian districts are smaller, so any point
+inside one usually selects the same cell.
+
+Two fixes fell out of this. Using admin2 `asciiname` rather than `name` (110
+entries carry diacritics) lifted the `district_name` route from 304 to 367.
+And the typeahead was scanning in file order and stopping at eight — no
+ranking at all, which is what made the lookup feel arbitrary. It now scores
+exact-name > name-prefix > district-prefix > substring, breaks ties by
+population, and matches against name + district + state so `sirmaur` reaches
+Nahan and `nagpur maharashtra` works.
+
 ---
 
 ## Constraint 4 — ERA5's wet bias is one-directional, and it flatters FAR
