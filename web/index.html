@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Does rainfall forecasting work in India?</title>
 <meta name="description" content="A national, multi-year, lead-time-resolved verification of rainfall forecast skill over India. Two in five rain forecasts are false alarms, and a week of lead time barely changes that.">
-<link rel="stylesheet" href="style.css?v=e6358445">
+<link rel="stylesheet" href="style.css?v=e72cd76c">
 </head>
 <body>
 
@@ -13,9 +13,9 @@
   <div class="wrap">
     <p class="eyebrow">Forecast skill verification · India · Feb 2024 – Aug 2026</p>
     <h1>When the forecast says rain, how often does it rain?</h1>
-    <p class="sub">A national, lead-time-resolved check of rainfall forecasts against
-       India Meteorological Department gauge observations — and what the answer is
-       worth to someone deciding whether to spray.</p>
+    <p class="sub">A national, lead-time-resolved check of rainfall forecasts
+       against India Meteorological Department gauge observations. The short
+       answer depends entirely on which way the forecast is pointing.</p>
     <div class="provenance" id="provenance"></div>
   </div>
 </header>
@@ -24,8 +24,8 @@
 <section id="tool">
   <div class="wrap">
     <p class="eyebrow">Decision tool</p>
-    <h2>Should you act on the rain forecast?</h2>
-    <p class="lede">Answer three questions. The answer uses what this study
+    <h2>Can you trust tomorrow's rain forecast where you are?</h2>
+    <p class="lede">Answer two questions. The answer uses what this study
        measured at your nearest grid cell — not a national average.</p>
 
     <div class="tool-grid">
@@ -53,24 +53,11 @@
                aria-label="Lead time in days"></div>
         </div>
 
-        <div class="step">
-          <span class="step-q"><span class="stepno">3</span> What is at stake?</span>
-          <label class="money" for="tCost">If you hold off for a day, what
-            does that cost you?
-            <span class="moneyin">₹ <input id="tCost" type="number" min="0"
-              step="any" inputmode="decimal" placeholder="200"></span></label>
-          <label class="money" for="tLoss">If you go ahead and it rains, what
-            do you lose?
-            <span class="moneyin">₹ <input id="tLoss" type="number" min="0"
-              step="any" inputmode="decimal" placeholder="1000"></span></label>
-          <p class="step-hint">Any units, per acre or per field — only the
-             ratio between them matters.</p>
-        </div>
       </div>
 
       <div class="answer" id="tAnswer" aria-live="polite">
         <p class="answer-empty">Tell me where you are and I'll tell you how
-           often it actually rains there when this forecast says rain.</p>
+           often this forecast is right where you are — in both directions.</p>
       </div>
     </div>
 
@@ -85,13 +72,16 @@
 <section id="finding">
   <div class="wrap">
     <p class="eyebrow">The study · the finding</p>
-    <h2>Two in five rain forecasts are false alarms — and a week of lead time barely changes that</h2>
+    <h2>A dry forecast is worth trusting. A rain forecast is closer to a coin flip.</h2>
 
-    <p class="hero-fig" id="heroFig">—</p>
-    <p class="hero-cap" id="heroCap">of one-day-ahead rain forecasts were false alarms:
-       the forecast said rain and no rain was measured.</p>
+    <div class="dirs hero-dirs" id="heroDirs"></div>
 
     <p class="lede" id="findingLede"></p>
+
+    <div class="box why">
+      <h4>Why the two directions differ — it is the base rate, not the model</h4>
+      <p id="asymWhy"></p>
+    </div>
 
     <div class="box scope">
       <h4>What this does and does not measure</h4>
@@ -99,10 +89,20 @@
     </div>
 
     <div class="chart-card">
-      <p class="chart-title">False alarm ratio by lead time</p>
-      <p class="chart-sub">Share of “rain” forecasts on which no rain was measured.
-        Lower is better. Shaded bands are 95% confidence intervals from a cluster
-        bootstrap over 8° spatial blocks.</p>
+      <p class="chart-title">How often the forecast is right, in each direction, by lead time</p>
+      <p class="chart-sub">Higher is better in both. Wet day is ≥1 mm. Shaded bands are
+        95% confidence intervals from a cluster bootstrap over 8° spatial blocks.
+        Note the two lines do not converge — the gap between them widens as the
+        forecast reaches further ahead.</p>
+      <div class="chart-holder" id="chartDirs"></div>
+      <ul class="legend" id="legendDirs"></ul>
+    </div>
+
+    <div class="chart-card">
+      <p class="chart-title">The rain direction alone, at two wet-day thresholds</p>
+      <p class="chart-sub">False alarm ratio: the share of “rain” forecasts on which no
+        rain was measured. This is the mirror of the orange line above — lower is
+        better here.</p>
       <div class="chart-holder" id="chartFar"></div>
       <ul class="legend" id="legendFar"></ul>
       <details class="tv"><summary>Table view — all metrics, all leads</summary>
@@ -134,7 +134,7 @@
 <section id="costloss">
   <div class="wrap">
     <p class="eyebrow">Is it worth acting on?</p>
-    <h2>Yes — at every lead from one to seven days, if protecting costs you less than about half the loss</h2>
+    <h2>Yes — at every lead from one to seven days, but only when protecting costs between about 6% and 56% of the loss</h2>
 
     <p class="lede" id="clLede"></p>
 
@@ -351,6 +351,6 @@ python build_places.py                      # place lookup for the tool</code></
   </div>
 </footer>
 
-<script src="app.js?v=e6358445"></script>
+<script src="app.js?v=e72cd76c"></script>
 </body>
 </html>

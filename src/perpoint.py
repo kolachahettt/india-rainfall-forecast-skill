@@ -64,15 +64,23 @@ def block_counts(cat: np.ndarray, nblk: int) -> np.ndarray:
 
 
 def boot_ci(bc: np.ndarray, rng, n_boot=N_BOOT):
+    """Intervals for BOTH directions of the forecast.
+
+    FAR answers "it said rain — did it?"; NPV answers "it said dry — did it
+    stay dry?". The second is the question a spray decision usually turns on,
+    and it is a different statistic on a different denominator, so it needs
+    its own interval rather than one inferred from FAR's.
+    """
     nblk = bc.shape[0]
     fars = np.empty(n_boot)
+    npvs = np.empty(n_boot)
     for i in range(n_boot):
-        a, b, _, _ = bc[rng.integers(0, nblk, size=nblk)].sum(axis=0)
+        a, b, c, d = bc[rng.integers(0, nblk, size=nblk)].sum(axis=0)
         fars[i] = b / (a + b) if (a + b) else np.nan
-    if np.all(np.isnan(fars)):
-        return np.nan, np.nan
-    return (float(np.nanpercentile(fars, 2.5)),
-            float(np.nanpercentile(fars, 97.5)))
+        npvs[i] = d / (c + d) if (c + d) else np.nan
+    q = lambda v: (np.nan, np.nan) if np.all(np.isnan(v)) else (
+        float(np.nanpercentile(v, 2.5)), float(np.nanpercentile(v, 97.5)))
+    return q(fars), q(npvs)
 
 
 def main() -> int:
@@ -91,12 +99,14 @@ def main() -> int:
                 a, b, c, d = [(cat == k).sum() for k in range(4)]
                 pod, far, csi, bias, hss = metrics_from(a, b, c, d)
                 nblk = len(cat) // BLOCK_DAYS
-                lo, hi = boot_ci(block_counts(cat, nblk), rng)
+                (lo, hi), (nlo, nhi) = boot_ci(block_counts(cat, nblk), rng)
+                npv = d / (c + d) if (c + d) else np.nan
                 p = pts.loc[pid]
                 rows.append(dict(point_id=pid, lat=p.lat, lon=p.lon,
                                  threshold_mm=thr, lead_days=lead,
                                  POD=pod, FAR=far, CSI=csi, BIAS=bias, HSS=hss,
                                  FAR_lo=lo, FAR_hi=hi,
+                                 NPV=npv, NPV_lo=nlo, NPV_hi=nhi,
                                  wet_days=int(a + c), n=int(len(cat))))
     out = pd.DataFrame(rows)
     out.to_csv(RESULTS / "perpoint_metrics.csv", index=False)
@@ -144,9 +154,11 @@ def main() -> int:
                 bc = np.vstack(bcs)
                 a, b, c_, d = bc.sum(axis=0)
                 _, far, _, _, _ = metrics_from(a, b, c_, d)
-                lo, hi = boot_ci(bc, rng)
+                (lo, hi), (nlo, nhi) = boot_ci(bc, rng)
                 recs.append(dict(grp=grp, threshold_mm=thr, lead_days=lead,
                                  FAR=far, FAR_lo=lo, FAR_hi=hi,
+                                 NPV=(d / (c_ + d) if (c_ + d) else np.nan),
+                                 NPV_lo=nlo, NPV_hi=nhi,
                                  n_points=g.point_id.nunique()))
             gs = pd.DataFrame(recs).dropna(subset=["FAR", "FAR_lo"])
             grows.append(gs)

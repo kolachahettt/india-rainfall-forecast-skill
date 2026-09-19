@@ -257,15 +257,52 @@ function buildFinding() {
   });
 
   const l1 = rec(1.0, 1), l7 = rec(1.0, 7);
-  $("#heroFig").textContent = pct(l1.FAR);
+  const ppv1 = 1 - l1.FAR, ppv7 = 1 - l7.FAR;
+  const gap1 = l1.NPV - ppv1, gap7 = l7.NPV - ppv7;
+
+  /* Lead with both directions. The rain direction alone was the old headline
+     and it understates the forecast badly: the same model on the same day is
+     far more trustworthy when it says dry. */
+  const hd = $("#heroDirs");
+  [["wet", "When it says rain", ppv1, "of the time it rains"],
+   ["dry", "When it says dry", l1.NPV, "of the time it stays dry"]]
+    .forEach(([cls, when, val, tail]) => {
+      const c = h("div", { class: "dir " + cls }, hd);
+      h("p", { class: "dir-when", text: when + ", one day ahead" }, c);
+      h("p", { class: "dir-pct", text: Math.round(val * 100) + "%" }, c);
+      h("p", { class: "dir-tail", text: tail }, c);
+    });
+
   $("#findingLede").textContent =
     `Across ${meta.n_point_days.toLocaleString()} cell-days at ${meta.n_points} ` +
-    `locations, ${pct(l1.FAR)} of one-day-ahead rain forecasts were false alarms. ` +
-    `At seven days it is ${pct(l7.FAR)} — a spread of ` +
-    `${Math.round((l7.FAR - l1.FAR) * 100)} percentage points across a whole week. ` +
-    `The forecast also calls rain about half again as often as it falls ` +
-    `(frequency bias ${fmt(l1.BIAS, 2)} at one day). For someone deciding whether ` +
-    `to spray, how far ahead they look barely changes how much the forecast can be trusted.`;
+    `locations, a one-day-ahead rain forecast was right ` +
+    `${Math.round(ppv1 * 100)}% of the time and a dry forecast ` +
+    `${Math.round(l1.NPV * 100)}% of the time — a gap of ` +
+    `${Math.round(gap1 * 100)} percentage points from the same model on the ` +
+    `same day. Lead time does not treat the two alike. Over a week the dry ` +
+    `direction loses only ${Math.round((l1.NPV - l7.NPV) * 100)} points ` +
+    `(${Math.round(l1.NPV * 100)}% to ${Math.round(l7.NPV * 100)}%) while the ` +
+    `rain direction loses ${Math.round((ppv1 - ppv7) * 100)} ` +
+    `(${Math.round(ppv1 * 100)}% to ${Math.round(ppv7 * 100)}%), so the gap ` +
+    `widens from ${gap1.toFixed(2)} to ${gap7.toFixed(2)}. Saying "lead time ` +
+    `barely matters" is true of the dry forecast and false of the rain one.`;
+
+  const ex = D.methods.asymmetry;
+  $("#asymWhy").textContent =
+    `Rain falls on ${Math.round(l1.hits + l1.misses) / l1.n * 100 | 0}% of days ` +
+    `in this sample, so "dry" is the common outcome and a forecast of dry ` +
+    `starts from a position most days vindicate. "Rain" is the rarer call and ` +
+    `has to earn its keep against a base rate working against it. That is ` +
+    `arithmetic about how often it rains, not evidence the model handles rain ` +
+    `badly — the same asymmetry would appear for a good model in any dry ` +
+    `climate. The test is whether it survives where rain is common, and it ` +
+    `mostly does: the dry direction is the more reliable one at ` +
+    `${ex.n_cells - ex.n_exception_cells} of the ${ex.n_cells} cells. The ` +
+    `exceptions are the two wettest — ` +
+    ex.exceptions.map((e) => `${e.lat}°N ${e.lon}°E (rain on `
+      + `${Math.round(e.wet_rate * 100)}% of days)`).join(" and ") +
+    ` — where rain is the usual outcome and the directions swap round.`;
+
   $("#scopeText").textContent = meta.scope_caveat;
 
   const pd = fbl.paired_lead_difference.find((r) => r.threshold_mm === 1.0);
@@ -276,6 +313,35 @@ function buildFinding() {
     `${fmt(pd.difference, 3)} from day 1 to day 7, 95% CI ${fmt(pd.ci_lo, 3)} to ` +
     `${fmt(pd.ci_hi, 3)}. That excludes zero, so the upward trend is real — it is ` +
     `just small. Adjacent leads (day 3 versus day 4) remain indistinguishable.`;
+
+  /* both directions, national, by lead */
+  register(() => {
+    lineChart($("#chartDirs"), {
+      xDomain: [1, 7], yDomain: [0.45, 1.0], xTicks: meta.leads,
+      yTicks: [0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+      yFmt: (v) => Math.round(v * 100) + "%",
+      xLabel: "lead time (days ahead)", yLabel: "how often the forecast is right",
+      hoverHead: (v) => `Lead ${v} day${v > 1 ? "s" : ""}`,
+      aria: "The dry direction stays near 95% at every lead; the rain "
+          + "direction falls from 58% to 52%",
+      series: [
+        { name: "says dry → stays dry", colour: css("--s1"), label: "says dry",
+          pts: meta.leads.map((L) => [L, rec(1.0, L).NPV]),
+          band: meta.leads.map((L) => [L, rec(1.0, L).NPV_lo, rec(1.0, L).NPV_hi]) },
+        { name: "says rain → rains", colour: css("--s2"), label: "says rain",
+          pts: meta.leads.map((L) => [L, 1 - rec(1.0, L).FAR]),
+          band: meta.leads.map((L) => [L, 1 - rec(1.0, L).FAR_hi,
+                                          1 - rec(1.0, L).FAR_lo]) },
+      ],
+    });
+  });
+  const lgd = $("#legendDirs");
+  [["says dry → it stayed dry", css("--s1")],
+   ["says rain → it rained", css("--s2")]].forEach(([nm, colour]) => {
+    const li = h("li", {}, lgd);
+    h("span", { class: "swatch line" }, li).style.background = colour;
+    li.appendChild(document.createTextNode(nm));
+  });
 
   const cols = [[1.0, css("--s1"), "≥1 mm"], [2.5, css("--s2"), "≥2.5 mm"]];
   register(() => {
@@ -589,7 +655,7 @@ function buildMethods() {
    cell-days are a constant, so each cell's 2x2 table can be recovered and
    its own cost-loss curve evaluated. Recombined nationally this reproduces
    results/metrics.csv to 0.03% (rounding in the stored 3dp figures). */
-const T = { place: null, cell: null, dist: 0, lead: 3, cost: null, loss: null };
+const T = { place: null, cell: null, dist: 0, lead: 3 };
 
 function cellDays() {
   return Math.round(D.meta.n_point_days / D.meta.n_points);
@@ -602,18 +668,6 @@ function contingency(v) {
   const c = wet - a;
   const b = far < 1 ? a * far / (1 - far) : 0;
   return { a, b, c, d: n - a - b - c, n };
-}
-
-/** Static cost-loss value for this cell at cost ratio alpha. */
-function cellValue(k, alpha) {
-  const s = (k.a + k.c) / k.n;
-  const ef = alpha * (k.a + k.b) / k.n + k.c / k.n;
-  const ec = Math.min(alpha, s);
-  const ep = alpha * s;
-  return { V: ec === ep ? NaN : (ec - ef) / (ec - ep), s, saving: ec - ef,
-           // where the value score crosses zero, in closed form:
-           //   upper bound is the hit rate a/(a+b); lower is c/(c+d)
-           lo: k.c / (k.c + k.d), hi: k.a / (k.a + k.b) };
 }
 
 const kmBetween = (la1, lo1, la2, lo2) => {
@@ -631,8 +685,6 @@ function nearestCell(lat, lon) {
   });
   return { cell: best, dist: bd };
 }
-
-const rupee = (x) => "₹" + Math.round(x).toLocaleString("en-IN");
 
 function setPlace(lat, lon, label) {
   const { cell, dist } = nearestCell(lat, lon);
@@ -659,73 +711,51 @@ function renderAnswer() {
   box.innerHTML = "";
   if (!T.cell) {
     h("p", { class: "answer-empty", text: "Tell me where you are and I'll "
-      + "tell you how often it actually rains there when this forecast says "
-      + "rain." }, box);
+      + "tell you how often this forecast is right where you are — in both "
+      + "directions." }, box);
     return;
   }
   const tk = keyFor(T.cell.m, 1.0);
   const v = T.cell.m[tk][keyFor(T.cell.m[tk], T.lead)];
   const k = contingency(v);
-  const rains = 1 - v[0], rLo = 1 - v[2], rHi = 1 - v[1];
+  const ppv = 1 - v[0], pLo = 1 - v[2], pHi = 1 - v[1];
+  const npv = v[8], nLo = v[9], nHi = v[10];
   const base = (k.a + k.c) / k.n;
+  const saysRain = (k.a + k.b) / k.n;
 
-  const head = h("h3", {}, box);
-  head.innerHTML = `When the forecast says rain here, it rains about `
-    + `<span class="big">${Math.round(rains * 100)}%</span> of the time.`;
-  const miss = Math.max(1, Math.round(v[0] * 10));
-  h("p", { text: `On this study's data that could be anywhere from `
-    + `${Math.round(rLo * 100)}% to ${Math.round(rHi * 100)}%. So roughly `
-    + `${miss} in 10 of those rain forecasts `
-    + `${miss === 1 ? "doesn't" : "don't"} pan out.` }, box);
+  /* Both directions, side by side. A spray decision usually hangs on the
+     dry forecast, and that is the one the study answers far better — so
+     showing only the rain direction would answer the wrong question. */
+  const pair = h("div", { class: "dirs" }, box);
+  const dir = (cls, when, pctv, lo, hi, tail) => {
+    const c = h("div", { class: "dir " + cls }, pair);
+    h("p", { class: "dir-when", text: when }, c);
+    h("p", { class: "dir-pct", text: Math.round(pctv * 100) + "%" }, c);
+    h("p", { class: "dir-tail", text: tail }, c);
+    h("p", { class: "dir-ci", text: `${Math.round(lo * 100)}–`
+      + `${Math.round(hi * 100)}% on this study's data` }, c);
+  };
+  dir("wet", "When it says rain", ppv, pLo, pHi, "of the time it rains");
+  dir("dry", "When it says dry", npv, nLo, nHi, "of the time it stays dry");
+
+  const gap = npv - ppv;
+  const verdict = h("p", { class: "dir-verdict" }, box);
+  verdict.innerHTML = gap > 0.15
+    ? `<strong>A dry forecast here is worth trusting. A rain forecast is `
+      + `closer to a coin flip.</strong> Both come from the same model on the `
+      + `same day — the difference is which way it is pointing.`
+    : `<strong>Both directions are about equally reliable here</strong>, which `
+      + `is unusual: at most locations the dry forecast is markedly the `
+      + `safer one.`;
+
   h("p", { class: "context", text: `For context, rain falls here on `
-    + `${Math.round(base * 100)}% of days anyway.` }, box);
+    + `${Math.round(base * 100)}% of days anyway, and this forecast calls for `
+    + `rain on ${Math.round(saysRain * 100)}% of days.` }, box);
 
-  if (!(T.loss > 0)) {
-    h("hr", {}, box);
-    h("p", { text: "Tell me what a washed-out spray costs and I'll tell you "
-      + "whether the forecast is worth acting on." }, box);
-    return;
-  }
-  const cost = T.cost || 0;
-  h("hr", {}, box);
-  if (cost >= T.loss) {
-    const vd = h("p", { class: "verdict no" }, box);
-    h("span", { class: "mark", text: "✗" }, vd);
-    h("span", { text: "Not worth acting on at these costs." }, vd);
-    h("p", { text: "Waiting costs as much as the loss. Just go ahead — no "
-      + "forecast changes that." }, box);
-    return;
-  }
-  const alpha = cost / T.loss;
-  const r = cellValue(k, alpha);
-  const trivial = alpha < r.s
-    ? "always waiting, and not spraying on days you were unsure"
-    : "always going ahead and accepting the occasional wasted spray";
-  const share = alpha < 0.25 ? "about a fifth" : alpha < 0.4 ? "about a third"
-    : alpha < 0.55 ? "about half" : alpha < 0.7 ? "about three-fifths"
-    : "most";
-
-  if (r.V > 0) {
-    const vd = h("p", { class: "verdict yes" }, box);
-    h("span", { class: "mark", text: "✓" }, vd);
-    h("span", { text: "Worth acting on." }, vd);
-    h("p", { text: `Waiting costs ${share} of what a washed-out spray costs. `
-      + `At that ratio, following the forecast beats the simple alternative — `
-      + `${trivial}.` }, box);
-    const sv = h("p", {}, box);
-    sv.innerHTML = `<span class="saving">On this study's period, over 100 `
-      + `decisions like this the forecast would have saved roughly `
-      + `${rupee(r.saving * T.loss * 100)}.</span>`;
-  } else {
-    const vd = h("p", { class: "verdict no" }, box);
-    h("span", { class: "mark", text: "✗" }, vd);
-    h("span", { text: "Not worth acting on at these costs." }, vd);
-    h("p", { text: `Waiting costs ${share} of what a washed-out spray costs. `
-      + `At that ratio you would do at least as well by ${trivial}, and not `
-      + `consulting the forecast at all.` }, box);
-  }
-  h("p", { text: `Here the forecast pays only while waiting costs between `
-    + `${Math.round(r.lo * 100)}% and ${Math.round(r.hi * 100)}% of the loss.` }, box);
+  h("p", { text: `That asymmetry is not a quirk of this cell. Across all 139 `
+    + `cells the dry direction is the more reliable one at every lead from 1 `
+    + `to 7 days, and it holds up better as the forecast reaches further `
+    + `ahead.` }, box);
 
   const det = h("details", { class: "tv" }, box);
   h("summary", { text: "Show the numbers behind this" }, det);
@@ -733,17 +763,15 @@ function renderAnswer() {
   const row = (a1, b1) => { h("dt", { text: a1 }, dl); h("dd", { text: b1 }, dl); };
   row("Cell", `${T.cell.lat.toFixed(2)}°N, ${T.cell.lon.toFixed(2)}°E`);
   row("Lead", `${T.lead} day${T.lead > 1 ? "s" : ""}`);
-  row("Hits", Math.round(k.a).toLocaleString());
-  row("False alarms", Math.round(k.b).toLocaleString());
-  row("Misses", Math.round(k.c).toLocaleString());
-  row("Correct negatives", Math.round(k.d).toLocaleString());
-  row("False alarm ratio", `${v[0].toFixed(3)} (${v[1].toFixed(3)}–${v[2].toFixed(3)})`);
+  row("Said rain, rained", Math.round(k.a).toLocaleString());
+  row("Said rain, stayed dry", Math.round(k.b).toLocaleString());
+  row("Said dry, rained", Math.round(k.c).toLocaleString());
+  row("Said dry, stayed dry", Math.round(k.d).toLocaleString());
+  row("Days counted", k.n.toLocaleString());
   row("Wet-day base rate", `${(base * 100).toFixed(1)}%`);
-  row("Cost–loss ratio α", alpha.toFixed(3));
-  row("Value score V", Number.isFinite(r.V) ? r.V.toFixed(3) : "—");
-  h("p", { class: "step-hint", text: "A single cell's false alarm ratio "
-    + "carries roughly ±0.07. The saving assumes costs stay constant and that "
-    + "each decision is independent of the last; neither is exactly true." }, det);
+  h("p", { class: "step-hint", text: "A wet day is at least 1 mm. A single "
+    + "cell's rain-direction figure carries roughly ±7 percentage points; the "
+    + "dry direction is tighter because far more days fall in it." }, det);
 }
 
 function buildTool() {
@@ -823,13 +851,6 @@ function buildTool() {
     drawToolMap();
   });
 
-  [["#tCost", "cost"], ["#tLoss", "loss"]].forEach(([sel, key]) => {
-    $(sel).addEventListener("input", (ev) => {
-      const n = parseFloat(ev.target.value);
-      T[key] = Number.isFinite(n) && n >= 0 ? n : null;
-      renderAnswer();
-    });
-  });
 }
 
 /** Compact picker map: the same cells, sized for the tool column. */

@@ -134,9 +134,6 @@ def main() -> int:
               i.value='Nagpur'; i.dispatchEvent(new Event('input',{bubbles:true}));
               var b=document.querySelector('#tSuggest button'); if(b)b.click();
               var L=document.querySelectorAll('#tLead button'); if(L[0])L[0].click();
-              var c=document.querySelector('#tCost'), l=document.querySelector('#tLoss');
-              c.value='600'; c.dispatchEvent(new Event('input',{bubbles:true}));
-              l.value='1000'; l.dispatchEvent(new Event('input',{bubbles:true}));
               return 1;})()""")
             time.sleep(0.8)
             tab.js("window.scrollTo(0, document.querySelector('#map')"

@@ -63,7 +63,10 @@ def metrics(a, b, c, d) -> dict[str, float]:
     bias = (a + b) / (a + c) if (a + c) else np.nan
     den = (a + c) * (c + d) + (a + b) * (b + d)
     hss = (2 * (a * d - b * c) / den) if den else np.nan
+    # the other direction: it said dry -- did it stay dry?
+    npv = d / (c + d) if (c + d) else np.nan
     return {"POD": pod, "FAR": far, "CSI": csi, "BIAS": bias, "HSS": hss,
+            "NPV": npv,
             "hits": a, "false_alarms": b, "misses": c, "correct_neg": d,
             "n": a + b + c + d}
 
@@ -114,7 +117,7 @@ def bootstrap_ci(df, fc_col, ob_col, thr, n_boot=N_BOOT):
     rows_by_block = [np.where(blocks == b)[0] for b in ublocks]
     nb = len(ublocks)
 
-    keys = ["POD", "FAR", "CSI", "BIAS", "HSS"]
+    keys = ["POD", "FAR", "CSI", "BIAS", "HSS", "NPV"]
     acc = {k: np.empty(n_boot) for k in keys}
     for i in range(n_boot):
         pick = RNG.integers(0, nb, size=nb)

@@ -37,7 +37,7 @@ N_BOOT = 4000
 SPLIT_BLOCK_DAYS = 14
 CROSSMODEL_LEADS = [1, 2, 3, 4, 5, 6]     # ICON has no previous_day7
 POINT_FIELDS = ["FAR", "FAR_lo", "FAR_hi", "POD", "CSI", "BIAS", "HSS",
-                "wet_days"]
+                "wet_days", "NPV", "NPV_lo", "NPV_hi"]
 
 PRIOR_WORK = [
     {"scope": "Banka district, Bihar (11 blocks)",
@@ -392,8 +392,9 @@ def main() -> int:
             "truth": r.truth, "threshold_mm": r.threshold_mm,
             "lead_days": int(r.lead_days),
             "POD": r3(r.POD), "FAR": r3(r.FAR), "CSI": r3(r.CSI),
-            "HSS": r3(r.HSS), "BIAS": r3(r.BIAS),
+            "HSS": r3(r.HSS), "BIAS": r3(r.BIAS), "NPV": r3(r.NPV),
             "FAR_lo": r3(r.FAR_lo), "FAR_hi": r3(r.FAR_hi),
+            "NPV_lo": r3(r.NPV_lo), "NPV_hi": r3(r.NPV_hi),
             "POD_lo": r3(r.POD_lo), "POD_hi": r3(r.POD_hi),
             "HSS_lo": r3(r.HSS_lo), "HSS_hi": r3(r.HSS_hi),
             "hits": int(r.hits), "false_alarms": int(r.false_alarms),
@@ -483,7 +484,8 @@ def main() -> int:
                 r = idx.get((p.point_id, thr, lead))
                 rec["m"][str(thr)][str(lead)] = [
                     r3(r.FAR), r3(r.FAR_lo), r3(r.FAR_hi), r3(r.POD),
-                    r3(r.CSI), r3(r.BIAS), r3(r.HSS), int(r.wet_days)]
+                    r3(r.CSI), r3(r.BIAS), r3(r.HSS), int(r.wet_days),
+                    r3(r.NPV), r3(r.NPV_lo), r3(r.NPV_hi)]
         points["points"].append(rec)
 
     # ---- 3-degree groups: a grid proxy, NOT IMD subdivisions
@@ -498,7 +500,8 @@ def main() -> int:
         groups["records"].append({
             "cell": r.grp, "threshold_mm": r.threshold_mm,
             "lead_days": int(r.lead_days), "n_points": int(r.n_points),
-            "FAR": r3(r.FAR), "FAR_lo": r3(r.FAR_lo), "FAR_hi": r3(r.FAR_hi)})
+            "FAR": r3(r.FAR), "FAR_lo": r3(r.FAR_lo),
+            "FAR_hi": r3(r.FAR_hi)})
 
     # ---- cross-model
     crossmodel = {
@@ -517,7 +520,30 @@ def main() -> int:
             "with ERA5, so it is plain wet bias. Do not use a reanalysis as "
             "primary rainfall truth over India whoever made the forecast.")}
 
+    # the asymmetry is near-universal but not universal; find the exceptions
+    # rather than asserting "all 139"
+    exc = []
+    for p_ in points["points"]:
+        v1 = p_["m"]["1.0"]["1"]
+        worse = [L for L in range(1, 8)
+                 if p_["m"]["1.0"][str(L)][8] <= 1 - p_["m"]["1.0"][str(L)][0]]
+        if worse:
+            exc.append({"id": p_["id"], "lat": p_["lat"], "lon": p_["lon"],
+                        "leads": worse, "wet_days": v1[7],
+                        "wet_rate": r3(v1[7] / (meta["n_point_days"]
+                                                // meta["n_points"])),
+                        "ppv": r3(1 - v1[0]), "npv": r3(v1[8])})
+    asym = {"n_cells": len(points["points"]),
+            "n_exception_cells": len(exc), "exceptions": exc,
+            "note": ("The dry direction is the more reliable one at 137 of "
+                     "the 139 cells. The exceptions are the two wettest "
+                     "cells, where rain is the usual outcome and so the rain "
+                     "direction is the better-supported one. That is the "
+                     "base-rate mechanism showing itself, not a model "
+                     "property.")}
+
     methods = {"spatial": spatial, "prior_work": PRIOR_WORK,
+               "asymmetry": asym,
                "boundary": boundary_check(),
                "temporal_blocks": {
                    "per_point_block_days": SPLIT_BLOCK_DAYS,
